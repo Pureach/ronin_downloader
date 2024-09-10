@@ -1,9 +1,7 @@
 import os
 import requests
-from telegram.ext import Application, CommandHandler, MessageHandler
-from telegram.ext import filters
-from telegram.ext import Updater
 import yt_dlp
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Resolve potential shortened URLs
 def resolve_url(url):
@@ -19,9 +17,9 @@ def download_video(url):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
         'noplaylist': True,
-        'cookiefile': 'cookies.txt',  # Use your saved cookies from browser
+        'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
@@ -36,11 +34,6 @@ def download_video(url):
     except Exception as e:
         print(f"Error downloading video from {resolved_url}: {e}")
         return None
-    
-def my_command_handler(update, context):
-    # Access context for user data, chat ID, etc.
-    user_id = update.message.from_user.id
-    chat_id = update.message.chat_id
 
 # Command to start the bot and welcome new users
 async def start(update, context):
@@ -58,22 +51,18 @@ async def handle_url(update, context):
         if video_file:
             await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
         else:
-            await update.message.reply_text('Failed to download video. Make sure the link is correct or that the video is not private/restricted.')
+            await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
     except Exception as e:
         await update.message.reply_text(f'Error: {str(e)}')
 
 # Set up the bot
 def main():
-    updater = Updater(token='YOUR_BOT_TOKEN', use_context=True)
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
 
     application.run_polling()
-
-    updater.start_polling()
-    updater.idle()
 
 if __name__ == '__main__':
     main()
