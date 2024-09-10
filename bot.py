@@ -5,7 +5,6 @@ import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-import asyncio  # For handling async tasks
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,8 +21,9 @@ downloaded_urls = []
 def resolve_url(url):
     try:
         response = requests.get(url)
+        response.raise_for_status()
         return response.url
-    except Exception as e:
+    except requests.RequestException as e:
         logger.error(f"Failed to resolve URL: {e}")
         return url
 
@@ -32,14 +32,14 @@ def download_video(url, progress_callback=None):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
         'noplaylist': True,
-        'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
+        'cookiefile': 'cookies.txt',
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
         },
-        'progress_hooks': [progress_callback] if progress_callback else []
+        'progress_hooks': [progress_callback] if progress_callback else [],
     }
 
     try:
@@ -47,7 +47,7 @@ def download_video(url, progress_callback=None):
             info_dict = ydl.extract_info(resolved_url, download=True)
             file_path = ydl.prepare_filename(info_dict)
             return file_path, info_dict
-    except Exception as e:
+    except yt_dlp.utils.DownloadError as e:
         logger.error(f"Error downloading video from {resolved_url}: {e}")
         return None, None
 
@@ -56,23 +56,22 @@ def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
-        if response.status_code == 200):
-            file_path = os.path.join('downloads', os.path.basename(resolved_url))
-            with open(file_path, 'wb') as file:
-                for chunk in response.iter_content(1024):
-                    file.write(chunk)
-            return file_path
-        else:
-            logger.error(f"Failed to download image: {response.status_code}")
-            return None
-    except Exception as e:
+        response.raise_for_status()
+        file_path = os.path.join('downloads', os.path.basename(resolved_url))
+        with open(file_path, 'wb') as file:
+            for chunk in response.iter_content(1024):
+                file.write(chunk)
+        return file_path
+    except requests.RequestException as e:
         logger.error(f"Error downloading image from {resolved_url}: {e}")
         return None
 
 # Command to start the bot and welcome new users
 async def start(update, context):
     user_first_name = update.effective_user.first_name
-    welcome_message = f"Welcome, {user_first_name}! 😊\nI'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, and I'll download it for you in HD!"
+    welcome_message = (f"Welcome, {user_first_name}! 😊\n"
+                       "I'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, "
+                       "and I'll download it for you in HD!")
     await update.message.reply_text(welcome_message)
 
 # Command to provide help to users
@@ -89,25 +88,15 @@ async def help_command(update, context):
 async def handle_url(update, context):
     url = update.message.text.strip()
 
-    # Send an initial message showing 0% processing (instead of "Starting download...")
-    message = await update.message.reply_text('0% processing...')
+    # Send initial message
+    message = await update.message.reply_text('Processing your request...')
 
     async def progress_hook(d):
         if d['status'] == 'downloading':
-            percent = d['_percent_str'].strip()
-            speed = d.get('_speed_str', 'N/A')
-            eta = d.get('_eta_str', 'N/A')
-            try:
-                await message.edit_text(f"{percent} processing... at {speed} ETA: {eta}")
-            except Exception as e:
-                logger.error(f"Error updating progress message: {e}")
+            percent = d['_percent_str']
+            await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
         elif d['status'] == 'finished':
-            try:
-                await message.edit_text('Download complete')
-                await asyncio.sleep(3)  # Optional: wait 3 seconds before removing the message
-                await message.delete()
-            except Exception as e:
-                logger.error(f"Error updating finished message: {e}")
+            await message.edit_text('Download complete')
 
     try:
         if 'douyin' in url or 'tiktok' in url:
@@ -119,7 +108,7 @@ async def handle_url(update, context):
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
                     await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
-                downloaded_urls.append(url)  # Add URL to the list of downloaded URLs
+                downloaded_urls.append(url)
             else:
                 await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
         else:
@@ -131,7 +120,7 @@ async def handle_url(update, context):
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(image_file, 'rb') as image:
                     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
-                downloaded_urls.append(url)  # Add URL to the list of downloaded URLs
+                downloaded_urls.append(url)
             else:
                 await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
     except Exception as e:
