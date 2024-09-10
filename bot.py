@@ -1,7 +1,12 @@
 import os
 import requests
 import yt_dlp
+import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Resolve potential shortened URLs
 def resolve_url(url):
@@ -9,14 +14,14 @@ def resolve_url(url):
         response = requests.get(url)
         return response.url
     except Exception as e:
-        print(f"Failed to resolve URL: {e}")
+        logger.error(f"Failed to resolve URL: {e}")
         return url
 
 # Function to download the video using yt-dlp with cookies support
 def download_video(url):
     resolved_url = resolve_url(url)
     ydl_opts = {
-        'format': 'best',
+        'format': 'bestvideo+bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
         'noplaylist': True,
         'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
@@ -32,27 +37,49 @@ def download_video(url):
             video_title = ydl.prepare_filename(info_dict)
             return video_title
     except Exception as e:
-        print(f"Error downloading video from {resolved_url}: {e}")
+        logger.error(f"Error downloading video from {resolved_url}: {e}")
         return None
 
-# Command to start the bot and welcome new users
-async def start(update, context):
-    user_first_name = update.effective_user.first_name
-    welcome_message = f"Welcome, {user_first_name}! 😊\nI'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, and I'll download it for you in HD!"
-    await update.message.reply_text(welcome_message)
+# Function to download images
+def download_image(url):
+    resolved_url = resolve_url(url)
+    try:
+        response = requests.get(resolved_url, stream=True)
+        if response.status_code == 200:
+            file_path = os.path.join('downloads', os.path.basename(resolved_url))
+            with open(file_path, 'wb') as file:
+                for chunk in response.iter_content(1024):
+                    file.write(chunk)
+            return file_path
+        else:
+            logger.error(f"Failed to download image: {response.status_code}")
+            return None
+    except Exception as e:
+        logger.error(f"Error downloading image from {resolved_url}: {e}")
+        return None
 
-# Handle URLs and download video
+# Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
-    await update.message.reply_text(f'Downloading video from {url}...')
+    await update.message.reply_text(f'Downloading from {url}...')
     
     try:
-        video_file = download_video(url)
-        if video_file:
-            await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
+        if 'douyin' in url or 'tiktok' in url:
+            video_file = download_video(url)
+            if video_file:
+                with open(video_file, 'rb') as video:
+                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video)
+            else:
+                await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
         else:
-            await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
+            image_file = download_image(url)
+            if image_file:
+                with open(image_file, 'rb') as image:
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image)
+            else:
+                await update.message.reply_text('Failed to download the image. Make sure the link is correct or that the image is not private/restricted.')
     except Exception as e:
+        logger.error(f"Error handling URL: {e}")
         await update.message.reply_text(f'Error: {str(e)}')
 
 # Set up the bot
