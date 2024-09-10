@@ -1,14 +1,17 @@
-name: Deploy Telegram Bot
+name: Deploy and Run Telegram Bot
 
-on:
+on: 
   push:
     branches:
       - main
+  schedule:
+    # Schedule to run the bot every hour (change as per your requirement)
+    - cron: '0 * * * *'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
@@ -23,8 +26,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run the bot
+    - name: Run the bot temporarily
       env:
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       run: |
-        nohup python bot.py &
+        python bot.py &
+        sleep 300  # Keeps the bot alive for 5 minutes (adjust as needed)
