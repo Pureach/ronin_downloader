@@ -1,41 +1,59 @@
+import os
+import logging
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
-import requests
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import yt_dlp
 
-# Replace 'YOUR_BOT_TOKEN' with your Telegram bot token
-TOKEN = 'YOUR_BOT_TOKEN'
+# Enable logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Start command handler
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Send me a Douyin/TikTok video link to download it in HD.')
+    update.message.reply_text('Send me a TikTok/Douyin video link, and I will download it for you in HD!')
 
+# Download video
 def download_video(update: Update, context: CallbackContext) -> None:
     url = update.message.text
-    if 'tiktok.com' in url or 'douyin.com' in url:
-        # This is a placeholder for the actual video downloading logic
-        # You need to implement the video extraction and downloading code
-        video_url = get_video_url(url)
-        if video_url:
-            response = requests.get(video_url)
-            with open('video.mp4', 'wb') as file:
-                file.write(response.content)
-            update.message.reply_text('Video downloaded successfully.')
-            update.message.reply_video(open('video.mp4', 'rb'))
-        else:
-            update.message.reply_text('Failed to download the video.')
-    else:
-        update.message.reply_text('Please send a valid Douyin/TikTok video link.')
+    chat_id = update.message.chat_id
 
-def get_video_url(url: str) -> str:
-    # Implement your video extraction logic here
-    return url
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': 'downloads/%(title)s.%(ext)s'
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info_dict = ydl.extract_info(url, download=True)
+            video_file = ydl.prepare_filename(info_dict)
+            context.bot.send_video(chat_id=chat_id, video=open(video_file, 'rb'))
+            os.remove(video_file)  # Remove file after sending it
+        except Exception as e:
+            update.message.reply_text('Failed to download the video. Make sure the link is correct.')
+
+# Error handler
+def error(update: Update, context: CallbackContext) -> None:
+    logger.warning(f'Update {update} caused error {context.error}')
 
 def main() -> None:
+    TOKEN = os.getenv('TELEGRAM_TOKEN')
+
+    # Create the Updater and pass it your bot's token.
     updater = Updater(TOKEN)
+
+    # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
 
-    dispatcher.add_handler(CommandHandler('start', start))
+    # Register the command handlers
+    dispatcher.add_handler(CommandHandler("start", start))
+
+    # Register the message handler for URLs
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, download_video))
 
+    # Log all errors
+    dispatcher.add_error_handler(error)
+
+    # Start the Bot
     updater.start_polling()
     updater.idle()
 
