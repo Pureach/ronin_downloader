@@ -94,8 +94,12 @@ async def handle_url(update, context):
     async def progress_hook(d):
         if d['status'] == 'downloading':
             percent = d['_percent_str']
-            await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
+            speed = d['_speed_str']
+            eta = d['_eta_str']
+            # Update message with download progress
+            await message.edit_text(f"Downloading: {percent} at {speed} ETA: {eta}")
         elif d['status'] == 'finished':
+            # Notify user when download is complete
             await message.edit_text('Download complete')
 
     try:
