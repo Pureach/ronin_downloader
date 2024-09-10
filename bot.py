@@ -56,7 +56,7 @@ def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
-        if response.status_code == 200:
+        if response.status_code == 200):
             file_path = os.path.join('downloads', os.path.basename(resolved_url))
             with open(file_path, 'wb') as file:
                 for chunk in response.iter_content(1024):
@@ -89,8 +89,8 @@ async def help_command(update, context):
 async def handle_url(update, context):
     url = update.message.text.strip()
 
-    # Send initial message and store it in a variable
-    message = await update.message.reply_text('Starting download...')
+    # Send an initial message showing 0% processing (instead of "Starting download...")
+    message = await update.message.reply_text('0% processing...')
 
     async def progress_hook(d):
         if d['status'] == 'downloading':
@@ -98,7 +98,7 @@ async def handle_url(update, context):
             speed = d.get('_speed_str', 'N/A')
             eta = d.get('_eta_str', 'N/A')
             try:
-                await message.edit_text(f"Downloading: {percent} at {speed} ETA: {eta}")
+                await message.edit_text(f"{percent} processing... at {speed} ETA: {eta}")
             except Exception as e:
                 logger.error(f"Error updating progress message: {e}")
         elif d['status'] == 'finished':
