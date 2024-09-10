@@ -182,21 +182,12 @@ async def handle_url(update, context):
                 await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
 
     except Exception as e:
-        logger.error(f"Error handling URL: {e}")
-        await message.edit_text(f'Error: {str(e)}')
+        logger.error(f"Error handling URL {url}: {e}")
+        await message.edit_text('An error occurred while processing the URL.')
 
-# Cleanup old files
-def cleanup_downloads():
-    try:
-        shutil.rmtree('downloads')
-        os.makedirs('downloads')
-        logger.info('Downloads directory cleaned up')
-    except Exception as e:
-        logger.error(f"Error cleaning up downloads directory: {e}")
-
-# Set up the bot
-def main():
-    application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
+# Main function to run the bot
+async def main():
+    application = Application.builder().token('YOUR_TELEGRAM_BOT_TOKEN').build()
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help_command))
