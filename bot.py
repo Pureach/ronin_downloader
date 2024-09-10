@@ -1,10 +1,13 @@
 import os
+import json
 import requests
 import yt_dlp
 import logging
 import shutil
+import time
+from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,8 +18,8 @@ DOWNLOADS_DIR = 'downloads'
 if not os.path.exists(DOWNLOADS_DIR):
     os.makedirs(DOWNLOADS_DIR)
 
-# List to keep track of downloaded URLs
-downloaded_urls = []
+# File to store downloaded URL metadata
+METADATA_FILE = 'metadata.json'
 
 # Default settings
 DEFAULT_SETTINGS = {
@@ -25,6 +28,23 @@ DEFAULT_SETTINGS = {
 }
 
 user_settings = {}  # To store user-specific settings
+
+# Default cleanup settings
+CLEANUP_DAYS = 7  # Default to 7 days
+CLEANUP_INTERVAL = 86400  # 24 hours in seconds
+
+# Load or initialize metadata
+def load_metadata():
+    if os.path.exists(METADATA_FILE):
+        with open(METADATA_FILE, 'r') as file:
+            return json.load(file)
+    return {}
+
+def save_metadata(metadata):
+    with open(METADATA_FILE, 'w') as file:
+        json.dump(metadata, file)
+
+metadata = load_metadata()
 
 # Resolve potential shortened URLs
 def resolve_url(url):
@@ -80,74 +100,8 @@ async def start(update, context):
     user_first_name = update.effective_user.first_name
     welcome_message = (f"Welcome, {user_first_name}! 😊\n"
                        "I'm Ronin Downloader bot. Send me a video or image link from popular media platforms, "
-                       "and I'll download it for you in HD! Use /help to see available commands.")
+                       "and I'll download it for you in HD!")
     await update.message.reply_text(welcome_message)
-
-# Command to provide help to users
-async def help_command(update, context):
-    help_text = (
-        "Here's how to use the bot:\n"
-        "/start - Welcome message\n"
-        "/help - Show this help message\n"
-        "/settings - Configure your preferences (e.g., video quality, image format)\n"
-        "/list - List all downloaded files\n"
-        "/delete <filename> - Delete a specific downloaded file\n"
-        "Send a video or image link from popular media platforms to download it in HD."
-    )
-    await update.message.reply_text(help_text)
-
-# Command to display current settings
-async def settings(update, context):
-    user_id = update.effective_user.id
-    settings = user_settings.get(user_id, DEFAULT_SETTINGS)
-    settings_text = (
-        f"Current settings:\n"
-        f"Video Quality: {settings['video_quality']}\n"
-        f"Image Format: {settings['image_format']}"
-    )
-    await update.message.reply_text(settings_text)
-
-# Command to configure user settings
-async def configure_settings(update, context):
-    user_id = update.effective_user.id
-    args = context.args
-
-    if len(args) != 2:
-        await update.message.reply_text("Usage: /configure <option> <value>\nOptions: video_quality, image_format")
-        return
-
-    option, value = args
-    if option == 'video_quality':
-        user_settings.setdefault(user_id, DEFAULT_SETTINGS)['video_quality'] = value
-        await update.message.reply_text(f"Video quality set to: {value}")
-    elif option == 'image_format':
-        user_settings.setdefault(user_id, DEFAULT_SETTINGS)['image_format'] = value
-        await update.message.reply_text(f"Image format set to: {value}")
-    else:
-        await update.message.reply_text("Invalid option. Use /settings to see available options.")
-
-# Command to list downloaded files
-async def list_downloads(update, context):
-    files = os.listdir(DOWNLOADS_DIR)
-    if files:
-        files_list = '\n'.join(files)
-        await update.message.reply_text(f"Downloaded files:\n{files_list}")
-    else:
-        await update.message.reply_text("No files have been downloaded yet.")
-
-# Command to delete a specific downloaded file
-async def delete_file(update, context):
-    if not context.args:
-        await update.message.reply_text("Usage: /delete <filename>")
-        return
-    
-    filename = context.args[0]
-    file_path = os.path.join(DOWNLOADS_DIR, filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        await update.message.reply_text(f"File deleted: {filename}")
-    else:
-        await update.message.reply_text(f"File not found: {filename}")
 
 # Handle URLs and download video or image
 async def handle_url(update, context):
@@ -198,7 +152,9 @@ async def handle_url(update, context):
                     reply_markup = InlineKeyboardMarkup(buttons)
                     with open(video_file, 'rb') as video:
                         await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
-                    downloaded_urls.append(url)
+                    # Update metadata
+                    metadata[url] = {'type': 'video', 'timestamp': datetime.now().isoformat()}
+                    save_metadata(metadata)
                 else:
                     await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
             elif platform_detected in ['twitter', 'vimeo']:
@@ -210,7 +166,9 @@ async def handle_url(update, context):
                     reply_markup = InlineKeyboardMarkup(buttons)
                     with open(image_file, 'rb') as image:
                         await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
-                    downloaded_urls.append(url)
+                    # Update metadata
+                    metadata[url] = {'type': 'image', 'timestamp': datetime.now().isoformat()}
+                    save_metadata(metadata)
                 else:
                     await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
             else:
@@ -222,26 +180,48 @@ async def handle_url(update, context):
         logger.error(f"Error handling URL: {e}")
         await message.edit_text(f'Error: {str(e)}')
 
-# Cleanup old files
-def cleanup_downloads():
-    try:
-        shutil.rmtree(DOWNLOADS_DIR)
-        os.makedirs(DOWNLOADS_DIR)
-        logger.info('Downloads directory cleaned up')
-    except Exception as e:
-        logger.error(f"Error cleaning up downloads directory: {e}")
+# Cleanup old files and links automatically
+def auto_cleanup():
+    cutoff_date = datetime.now() - timedelta(days=CLEANUP_DAYS)
+    deleted_files = []
+    deleted_links = []
+
+    # Remove old files
+    for file_name in os.listdir(DOWNLOADS_DIR):
+        file_path = os.path.join(DOWNLOADS_DIR, file_name)
+        if os.path.isfile(file_path):
+            file_mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+            if file_mod_time < cutoff_date:
+                os.remove(file_path)
+                deleted_files.append(file_name)
+
+    # Remove old links from metadata
+    to_remove = [url for url, data in metadata.items() if datetime.fromisoformat(data['timestamp']) < cutoff_date]
+    for url in to_remove:
+        del metadata[url]
+        deleted_links.append(url)
+
+    save_metadata(metadata)
+
+    if deleted_files or deleted_links:
+        log_msg = "Automatic cleanup complete.\n"
+        if deleted_files:
+            log_msg += f"Deleted files:\n" + '\n'.join(deleted_files) + '\n'
+        if deleted_links:
+            log_msg += f"Deleted links:\n" + '\n'.join(deleted_links)
+        logger.info(log_msg)
+    else:
+        logger.info("No files or links were old enough to delete during automatic cleanup.")
 
 # Set up the bot
 def main():
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
 
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(CommandHandler('settings', settings))
-    application.add_handler(CommandHandler('configure', configure_settings))
-    application.add_handler(CommandHandler('list', list_downloads))
-    application.add_handler(CommandHandler('delete', delete_file))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
+
+    # Schedule periodic cleanup (e.g., every 24 hours)
+    application.job_queue.run_repeating(auto_cleanup, interval=CLEANUP_INTERVAL, first=0)
 
     application.run_polling()
 
