@@ -3,6 +3,7 @@ import requests
 import yt_dlp
 import logging
 import shutil
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Configure logging
@@ -51,7 +52,7 @@ def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
-        if response.status_code == 200):
+        if response.status_code == 200:
             file_path = os.path.join('downloads', os.path.basename(resolved_url))
             with open(file_path, 'wb') as file:
                 for chunk in response.iter_content(1024):
@@ -96,15 +97,23 @@ async def handle_url(update, context):
         if 'douyin' in url or 'tiktok' in url:
             video_file, info_dict = download_video(url, progress_callback=progress_hook)
             if video_file:
+                buttons = [
+                    [InlineKeyboardButton("URL", url=url)]
+                ]
+                reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
-                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video)
+                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
             else:
                 await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
         else:
             image_file = download_image(url)
             if image_file:
+                buttons = [
+                    [InlineKeyboardButton("URL", url=url)]
+                ]
+                reply_markup = InlineKeyboardMarkup(buttons)
                 with open(image_file, 'rb') as image:
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image)
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
             else:
                 await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
     except Exception as e:
