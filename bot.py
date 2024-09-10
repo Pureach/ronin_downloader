@@ -1,5 +1,4 @@
 import os
-import json
 import requests
 import yt_dlp
 import logging
@@ -7,7 +6,8 @@ import shutil
 import time
 from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import CallbackContext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,8 +18,8 @@ DOWNLOADS_DIR = 'downloads'
 if not os.path.exists(DOWNLOADS_DIR):
     os.makedirs(DOWNLOADS_DIR)
 
-# File to store downloaded URL metadata
-METADATA_FILE = 'metadata.json'
+# List to keep track of downloaded URLs
+downloaded_urls = []
 
 # Default settings
 DEFAULT_SETTINGS = {
@@ -32,19 +32,6 @@ user_settings = {}  # To store user-specific settings
 # Default cleanup settings
 CLEANUP_DAYS = 7  # Default to 7 days
 CLEANUP_INTERVAL = 86400  # 24 hours in seconds
-
-# Load or initialize metadata
-def load_metadata():
-    if os.path.exists(METADATA_FILE):
-        with open(METADATA_FILE, 'r') as file:
-            return json.load(file)
-    return {}
-
-def save_metadata(metadata):
-    with open(METADATA_FILE, 'w') as file:
-        json.dump(metadata, file)
-
-metadata = load_metadata()
 
 # Resolve potential shortened URLs
 def resolve_url(url):
@@ -100,7 +87,7 @@ async def start(update, context):
     user_first_name = update.effective_user.first_name
     welcome_message = (f"Welcome, {user_first_name}! 😊\n"
                        "I'm Ronin Downloader bot. Send me a video or image link from popular media platforms, "
-                       "and I'll download it for you in HD!")
+                       "and I'll download it for you in HD! Use /start to restart the bot.")
     await update.message.reply_text(welcome_message)
 
 # Handle URLs and download video or image
@@ -152,9 +139,7 @@ async def handle_url(update, context):
                     reply_markup = InlineKeyboardMarkup(buttons)
                     with open(video_file, 'rb') as video:
                         await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
-                    # Update metadata
-                    metadata[url] = {'type': 'video', 'timestamp': datetime.now().isoformat()}
-                    save_metadata(metadata)
+                    downloaded_urls.append(url)
                 else:
                     await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
             elif platform_detected in ['twitter', 'vimeo']:
@@ -166,9 +151,7 @@ async def handle_url(update, context):
                     reply_markup = InlineKeyboardMarkup(buttons)
                     with open(image_file, 'rb') as image:
                         await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
-                    # Update metadata
-                    metadata[url] = {'type': 'image', 'timestamp': datetime.now().isoformat()}
-                    save_metadata(metadata)
+                    downloaded_urls.append(url)
                 else:
                     await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
             else:
@@ -180,13 +163,11 @@ async def handle_url(update, context):
         logger.error(f"Error handling URL: {e}")
         await message.edit_text(f'Error: {str(e)}')
 
-# Cleanup old files and links automatically
-def auto_cleanup():
+# Scheduled cleanup based on a set interval (e.g., every 24 hours)
+async def scheduled_cleanup(context: CallbackContext):
     cutoff_date = datetime.now() - timedelta(days=CLEANUP_DAYS)
     deleted_files = []
-    deleted_links = []
 
-    # Remove old files
     for file_name in os.listdir(DOWNLOADS_DIR):
         file_path = os.path.join(DOWNLOADS_DIR, file_name)
         if os.path.isfile(file_path):
@@ -194,24 +175,11 @@ def auto_cleanup():
             if file_mod_time < cutoff_date:
                 os.remove(file_path)
                 deleted_files.append(file_name)
-
-    # Remove old links from metadata
-    to_remove = [url for url, data in metadata.items() if datetime.fromisoformat(data['timestamp']) < cutoff_date]
-    for url in to_remove:
-        del metadata[url]
-        deleted_links.append(url)
-
-    save_metadata(metadata)
-
-    if deleted_files or deleted_links:
-        log_msg = "Automatic cleanup complete.\n"
-        if deleted_files:
-            log_msg += f"Deleted files:\n" + '\n'.join(deleted_files) + '\n'
-        if deleted_links:
-            log_msg += f"Deleted links:\n" + '\n'.join(deleted_links)
-        logger.info(log_msg)
+    
+    if deleted_files:
+        logger.info(f"Scheduled cleanup complete. Deleted files:\n" + '\n'.join(deleted_files))
     else:
-        logger.info("No files or links were old enough to delete during automatic cleanup.")
+        logger.info("No files were old enough to delete during scheduled cleanup.")
 
 # Set up the bot
 def main():
@@ -221,7 +189,7 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
 
     # Schedule periodic cleanup (e.g., every 24 hours)
-    application.job_queue.run_repeating(auto_cleanup, interval=CLEANUP_INTERVAL, first=0)
+    application.job_queue.run_repeating(scheduled_cleanup, interval=CLEANUP_INTERVAL, first=0)
 
     application.run_polling()
 
