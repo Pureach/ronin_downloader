@@ -1,34 +1,60 @@
 import os
+import requests
 from telegram.ext import Application, CommandHandler, MessageHandler
 from telegram.ext import filters
 import yt_dlp
 
-# Function to download the video using yt-dlp
+# Resolve potential shortened URLs
+def resolve_url(url):
+    try:
+        response = requests.get(url)
+        return response.url
+    except Exception as e:
+        print(f"Failed to resolve URL: {e}")
+        return url
+
+# Function to download the video using yt-dlp with cookies support
 def download_video(url):
+    resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'noplaylist': True,
+        'cookiefile': 'cookies.txt',  # Use your saved cookies from browser
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
+            'Referer': resolved_url,
+        },
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        video_title = ydl.prepare_filename(info_dict)
-        return video_title
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(resolved_url, download=True)
+            video_title = ydl.prepare_filename(info_dict)
+            return video_title
+    except Exception as e:
+        print(f"Error downloading video from {resolved_url}: {e}")
+        return None
 
-# Command to start the bot
+# Command to start the bot and welcome new users
 async def start(update, context):
-    await update.message.reply_text('Send me a video link, and I\'ll download it for you in HD!')
+    user_first_name = update.effective_user.first_name
+    welcome_message = f"Welcome, {user_first_name}! 😊\nI'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, and I'll download it for you in HD!"
+    await update.message.reply_text(welcome_message)
 
 # Handle URLs and download video
 async def handle_url(update, context):
-    url = update.message.text
+    url = update.message.text.strip()
     await update.message.reply_text(f'Downloading video from {url}...')
+    
     try:
         video_file = download_video(url)
-        await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
+        if video_file:
+            await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
+        else:
+            await update.message.reply_text('Failed to download video. Make sure the link is correct or that the video is not private/restricted.')
     except Exception as e:
-        await update.message.reply_text('Failed to download video. Make sure the link is correct.')
+        await update.message.reply_text(f'Error: {str(e)}')
 
 # Set up the bot
 def main():
