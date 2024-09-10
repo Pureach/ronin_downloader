@@ -89,7 +89,7 @@ async def handle_url(update, context):
     url = update.message.text.strip()
 
     # Send initial message and store it in a variable
-    message = await update.message.reply_text('Starting download...')
+    #message = await update.message.reply_text('Starting download...')
 
     async def progress_hook(d):
         if d['status'] == 'downloading':
