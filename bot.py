@@ -1,45 +1,44 @@
 import os
-import telebot
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import yt_dlp
 
-# Initialize bot with Telegram token from environment variables
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
+# Function to download the video using yt-dlp
+def download_video(url):
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'noplaylist': True,
+    }
 
-# Set yt-dlp options
-ydl_opts = {
-    'format': 'best',
-    'outtmpl': 'downloads/%(title)s.%(ext)s',
-}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=True)
+        video_title = ydl.prepare_filename(info_dict)
+        return video_title
 
-# Start command handler
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "Welcome! Send me a Douyin or TikTok link, and I'll download the HD video for you.")
+# Command to start the bot
+def start(update, context):
+    update.message.reply_text('Send me a video link, and I\'ll download it for you in HD!')
 
-# Handle messages containing URLs
-@bot.message_handler(func=lambda message: True)
-def handle_url(message):
-    url = message.text
-    if "douyin" in url or "tiktok" in url:
-        bot.reply_to(message, "Downloading video... Please wait.")
-        download_video(url, message)
-    else:
-        bot.reply_to(message, "Please send a valid Douyin or TikTok URL.")
-
-def download_video(url, message):
+# Handle URLs and download video
+def handle_url(update, context):
+    url = update.message.text
+    update.message.reply_text(f'Downloading video from {url}...')
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_name = ydl.prepare_filename(info)
-            send_video(file_name, message)
+        video_file = download_video(url)
+        context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
     except Exception as e:
-        bot.reply_to(message, f"An error occurred: {e}")
+        update.message.reply_text('Failed to download video. Make sure the link is correct.')
 
-def send_video(file_name, message):
-    with open(file_name, 'rb') as video:
-        bot.send_video(message.chat.id, video)
-    os.remove(file_name)  # Clean up downloaded file
+# Set up the bot
+def main():
+    updater = Updater(token=os.getenv('TELEGRAM_TOKEN'), use_context=True)
+    dp = updater.dispatcher
 
-if __name__ == "__main__":
-    bot.polling()
+    dp.add_handler(CommandHandler('start', start))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_url))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
