@@ -59,6 +59,12 @@ def download_image(url):
         logger.error(f"Error downloading image from {resolved_url}: {e}")
         return None
 
+# Command to start the bot and welcome new users
+async def start(update, context):
+    user_first_name = update.effective_user.first_name
+    welcome_message = f"Welcome, {user_first_name}! 😊\nI'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, and I'll download it for you in HD!"
+    await update.message.reply_text(welcome_message)
+
 # Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
