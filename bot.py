@@ -5,6 +5,7 @@ import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,8 +27,8 @@ def resolve_url(url):
         logger.error(f"Failed to resolve URL: {e}")
         return url
 
-# Function to download the video using yt-dlp with cookies support
-def download_video(url, progress_callback=None):
+# Function to download media using yt-dlp
+async def download_media(url, progress_callback=None):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/best',
@@ -47,11 +48,11 @@ def download_video(url, progress_callback=None):
             file_path = ydl.prepare_filename(info_dict)
             return file_path, info_dict
     except Exception as e:
-        logger.error(f"Error downloading video from {resolved_url}: {e}")
+        logger.error(f"Error downloading media from {resolved_url}: {e}")
         return None, None
 
 # Function to download images
-def download_image(url):
+async def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
@@ -73,7 +74,7 @@ async def start(update, context):
     user_first_name = update.effective_user.first_name
     welcome_message = (
         f"Welcome, {user_first_name}! 😊\n"
-        "I'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, "
+        "I'm Ronin Downloader bot. Send me a video or image link from various media platforms, "
         "and I'll download it for you in HD!"
     )
     await update.message.reply_text(welcome_message)
@@ -84,7 +85,7 @@ async def help_command(update, context):
         "Here's how to use the bot:\n"
         "/start - Welcome message\n"
         "/help - Show this help message\n"
-        "Send a video link from Instagram, Facebook, or TikTok to download it in HD."
+        "Send a media link from platforms like Instagram, Facebook, TikTok, YouTube, or Twitter to download it."
     )
     await update.message.reply_text(help_text)
 
@@ -106,12 +107,11 @@ async def handle_url(update, context):
         elif d['status'] == 'finished':
             await message.edit_text('Download complete')
             await update.message.reply_text('Download complete!')
-            # Provide a link to the downloaded file if needed
-            # await update.message.reply_document(document=open(file_path, 'rb'))
 
     try:
-        if 'douyin' in url or 'tiktok' in url:
-            video_file, info_dict = download_video(url, progress_callback=progress_hook)
+        if 'youtube.com' in url:
+            # Handle YouTube videos
+            video_file, info_dict = await download_media(url, progress_callback=progress_hook)
             if video_file:
                 buttons = [[InlineKeyboardButton("URL", url=url)]]
                 reply_markup = InlineKeyboardMarkup(buttons)
@@ -120,8 +120,57 @@ async def handle_url(update, context):
                 downloaded_urls.append(url)
             else:
                 await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
+
+        elif 'douyin' in url or 'tiktok' in url:
+            # Handle TikTok videos
+            video_file, info_dict = await download_media(url, progress_callback=progress_hook)
+            if video_file:
+                buttons = [[InlineKeyboardButton("URL", url=url)]]
+                reply_markup = InlineKeyboardMarkup(buttons)
+                with open(video_file, 'rb') as video:
+                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
+                downloaded_urls.append(url)
+            else:
+                await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
+
+        elif 'instagram.com' in url:
+            # Handle Instagram media (e.g., videos and images)
+            media_file = await download_media(url, progress_callback=progress_hook)
+            if media_file:
+                buttons = [[InlineKeyboardButton("URL", url=url)]]
+                reply_markup = InlineKeyboardMarkup(buttons)
+                with open(media_file, 'rb') as media:
+                    await context.bot.send_document(chat_id=update.effective_chat.id, document=media, reply_markup=reply_markup)
+                downloaded_urls.append(url)
+            else:
+                await message.edit_text('Failed to download the media. The link might be incorrect or the media might be private/restricted.')
+
+        elif 'facebook.com' in url:
+            # Handle Facebook videos
+            media_file = await download_media(url, progress_callback=progress_hook)
+            if media_file:
+                buttons = [[InlineKeyboardButton("URL", url=url)]]
+                reply_markup = InlineKeyboardMarkup(buttons)
+                with open(media_file, 'rb') as media:
+                    await context.bot.send_video(chat_id=update.effective_chat.id, video=media, reply_markup=reply_markup)
+                downloaded_urls.append(url)
+            else:
+                await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
+
+        elif 'twitter.com' in url:
+            # Handle Twitter media
+            media_file = await download_media(url, progress_callback=progress_hook)
+            if media_file:
+                buttons = [[InlineKeyboardButton("URL", url=url)]]
+                reply_markup = InlineKeyboardMarkup(buttons)
+                with open(media_file, 'rb') as media:
+                    await context.bot.send_document(chat_id=update.effective_chat.id, document=media, reply_markup=reply_markup)
+                downloaded_urls.append(url)
+            else:
+                await message.edit_text('Failed to download the media. The link might be incorrect or the media might be private/restricted.')
+
         else:
-            image_file = download_image(url)
+            image_file = await download_image(url)
             if image_file:
                 buttons = [[InlineKeyboardButton("URL", url=url)]]
                 reply_markup = InlineKeyboardMarkup(buttons)
@@ -130,6 +179,7 @@ async def handle_url(update, context):
                 downloaded_urls.append(url)
             else:
                 await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
+
     except Exception as e:
         logger.error(f"Error handling URL: {e}")
         await message.edit_text(f'Error: {str(e)}')
