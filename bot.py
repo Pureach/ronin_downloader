@@ -55,7 +55,7 @@ def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
-        if response.status_code == 200:
+        if response.status_code == 200):
             file_path = os.path.join('downloads', os.path.basename(resolved_url))
             with open(file_path, 'wb') as file:
                 for chunk in response.iter_content(1024):
@@ -87,11 +87,6 @@ async def help_command(update, context):
 # Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
-    
-    # Check if the URL has already been downloaded
-    if url in downloaded_urls:
-        await update.message.reply_text('This link has already been downloaded.')
-        return
 
     message = await update.message.reply_text('Starting download...')
 
@@ -100,7 +95,8 @@ async def handle_url(update, context):
             percent = d['_percent_str']
             await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
         elif d['status'] == 'finished':
-            await message.edit_text('Download complete')
+            await message.delete()
+            await update.message.reply_text('Download complete')
 
     try:
         if 'douyin' in url or 'tiktok' in url:
