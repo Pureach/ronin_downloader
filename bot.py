@@ -97,9 +97,9 @@ async def handle_url(update, context):
 
     async def progress_hook(d):
         if d['status'] == 'downloading':
-            percent = d['_percent_str']
-            speed = d['_speed_str']
-            eta = d['_eta_str']
+            percent = d.get('_percent_str', '0.0%')
+            speed = d.get('_speed_str', '0 KB/s')
+            eta = d.get('_eta_str', 'unknown')
             # Update the message every 10 seconds to avoid flooding
             if d.get('elapsed', 0) % 10 == 0:
                 await message.edit_text(f"Downloading: {percent} at {speed} ETA: {eta}")
