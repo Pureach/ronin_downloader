@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 import yt_dlp
 
 # Enable logging
@@ -9,11 +9,11 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Start command handler
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Send me a TikTok/Douyin video link, and I will download it for you in HD!')
+async def start(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text('Send me a TikTok/Douyin video link, and I will download it for you in HD!')
 
 # Download video
-def download_video(update: Update, context: CallbackContext) -> None:
+async def download_video(update: Update, context: CallbackContext) -> None:
     url = update.message.text
     chat_id = update.message.chat_id
 
@@ -26,36 +26,32 @@ def download_video(update: Update, context: CallbackContext) -> None:
         try:
             info_dict = ydl.extract_info(url, download=True)
             video_file = ydl.prepare_filename(info_dict)
-            context.bot.send_video(chat_id=chat_id, video=open(video_file, 'rb'))
+            await context.bot.send_video(chat_id=chat_id, video=open(video_file, 'rb'))
             os.remove(video_file)  # Remove file after sending it
         except Exception as e:
-            update.message.reply_text('Failed to download the video. Make sure the link is correct.')
+            await update.message.reply_text('Failed to download the video. Make sure the link is correct.')
 
 # Error handler
-def error(update: Update, context: CallbackContext) -> None:
+async def error(update: Update, context: CallbackContext) -> None:
     logger.warning(f'Update {update} caused error {context.error}')
 
 def main() -> None:
     TOKEN = os.getenv('TELEGRAM_TOKEN')
 
-    # Create the Updater and pass it your bot's token.
-    updater = Updater(TOKEN)
-
-    # Get the dispatcher to register handlers
-    dispatcher = updater.dispatcher
+    # Create the Application and pass it your bot's token.
+    application = Application.builder().token(TOKEN).build()
 
     # Register the command handlers
-    dispatcher.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", start))
 
     # Register the message handler for URLs
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, download_video))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
 
     # Log all errors
-    dispatcher.add_error_handler(error)
+    application.add_error_handler(error)
 
     # Start the Bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
