@@ -3,7 +3,7 @@ import requests
 import yt_dlp
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
