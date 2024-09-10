@@ -1,63 +1,45 @@
 import os
-import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+import telebot
 import yt_dlp
 
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Initialize bot with Telegram token from environment variables
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Accessing the Telegram Bot Token from Environment Variables
-TOKEN = os.getenv('TELEGRAM_TOKEN')
+# Set yt-dlp options
+ydl_opts = {
+    'format': 'best',
+    'outtmpl': 'downloads/%(title)s.%(ext)s',
+}
 
-def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /start is issued."""
-    user = update.effective_user
-    update.message.reply_markdown_v2(
-        fr'Hi {user.mention_markdown_v2()}\! Welcome to the Video Downloader Bot\.\n'
-        'Send me a video URL and I will download it for you\.',
-    )
+# Start command handler
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Welcome! Send me a Douyin or TikTok link, and I'll download the HD video for you.")
 
-def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Download video from the provided URL."""
-    url = update.message.text.strip()
-    update.message.reply_text('Downloading video... This may take a while.')
+# Handle messages containing URLs
+@bot.message_handler(func=lambda message: True)
+def handle_url(message):
+    url = message.text
+    if "douyin" in url or "tiktok" in url:
+        bot.reply_to(message, "Downloading video... Please wait.")
+        download_video(url, message)
+    else:
+        bot.reply_to(message, "Please send a valid Douyin or TikTok URL.")
 
-    ydl_opts = {
-        'format': 'bestvideo',
-        'outtmpl': '%(title)s.%(ext)s',
-        'noplaylist': True,
-        'quiet': True,
-        'postprocessors': [{
-            'key': 'FFmpegVideoConvertor',
-            'preferedformat': 'mp4',  # Convert to mp4 if necessary
-        }]
-    }
-
+def download_video(url, message):
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
-            video_title = info_dict.get('title', 'downloaded_video')
-            update.message.reply_text(f'✅ Video downloaded successfully: {video_title}.mp4')
+            info = ydl.extract_info(url, download=True)
+            file_name = ydl.prepare_filename(info)
+            send_video(file_name, message)
     except Exception as e:
-        logger.error(f'Error downloading video: {e}')
-        update.message.reply_text('Failed to download video. Please check the URL and try again.')
+        bot.reply_to(message, f"An error occurred: {e}")
 
-def main() -> None:
-    """Start the bot."""
-    if not TOKEN:
-        logger.error('The TELEGRAM_TOKEN environment variable is not set.')
-        return
-    application = Application.builder().token(TOKEN).build()
+def send_video(file_name, message):
+    with open(file_name, 'rb') as video:
+        bot.send_video(message.chat.id, video)
+    os.remove(file_name)  # Clean up downloaded file
 
-    # on different commands - answer in Telegram
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
-
-    # Run the bot until the user presses Ctrl-C
-    application.run_polling()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    bot.polling()
