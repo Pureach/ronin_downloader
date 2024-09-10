@@ -102,6 +102,7 @@ async def handle_url(update, context):
                 ]
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
+                    
                     await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
             else:
                 await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
