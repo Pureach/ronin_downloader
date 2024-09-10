@@ -2,6 +2,7 @@ import os
 import requests
 import yt_dlp
 import logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Configure logging
@@ -35,10 +36,10 @@ def download_video(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(resolved_url, download=True)
             video_title = ydl.prepare_filename(info_dict)
-            return video_title
+            return video_title, info_dict
     except Exception as e:
         logger.error(f"Error downloading video from {resolved_url}: {e}")
-        return None
+        return None, None
 
 # Function to download images
 def download_image(url):
@@ -65,17 +66,26 @@ async def handle_url(update, context):
     
     try:
         if 'douyin' in url or 'tiktok' in url:
-            video_file = download_video(url)
+            video_file, info_dict = download_video(url)
             if video_file:
+                buttons = [
+                    [InlineKeyboardButton("Origin URL", url=url)],
+                    [InlineKeyboardButton("Music", url=info_dict.get('webpage_url'))]
+                ]
+                reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
-                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video)
+                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
             else:
                 await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
         else:
             image_file = download_image(url)
             if image_file:
+                buttons = [
+                    [InlineKeyboardButton("Origin URL", url=url)]
+                ]
+                reply_markup = InlineKeyboardMarkup(buttons)
                 with open(image_file, 'rb') as image:
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image)
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
             else:
                 await update.message.reply_text('Failed to download the image. Make sure the link is correct or that the image is not private/restricted.')
     except Exception as e:
