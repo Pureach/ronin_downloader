@@ -5,6 +5,7 @@ import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.constants import ParseMode
 import asyncio
 
 # Configure logging
@@ -27,7 +28,7 @@ def resolve_url(url):
         logger.error(f"Failed to resolve URL: {e}")
         return url
 
-# Function to download media using yt-dlp
+# Function to download media using yt-dlp with progress hooks
 async def download_media(url, progress_callback=None):
     resolved_url = resolve_url(url)
     ydl_opts = {
@@ -101,8 +102,8 @@ async def handle_url(update, context):
             percent = d.get('_percent_str', '0.0%')
             speed = d.get('_speed_str', '0 KB/s')
             eta = d.get('_eta_str', 'unknown')
-            # Update the message every 10 seconds to avoid flooding
-            if d.get('elapsed', 0) % 10 == 0:
+            # Update the message every 5 seconds to avoid flooding
+            if d.get('elapsed', 0) % 5 == 0:
                 await message.edit_text(f"Downloading: {percent} at {speed} ETA: {eta}")
         elif d['status'] == 'finished':
             await message.edit_text('Download complete')
