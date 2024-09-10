@@ -2,11 +2,19 @@ import os
 import requests
 import yt_dlp
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Ensure downloads directory exists
+if not os.path.exists('downloads'):
+    os.makedirs('downloads')
 
 # Resolve potential shortened URLs
 def resolve_url(url):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         return response.url
     except Exception as e:
         print(f"Failed to resolve URL: {e}")
@@ -17,13 +25,15 @@ def download_video(url):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
         'noplaylist': True,
-        'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
+        'cookiefile': 'cookies.txt',  # Ensure the cookies.txt file exists
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
         },
+        'retries': 3,  # Retry downloading the video up to 3 times
+        'timeout': 60,  # Set a timeout of 60 seconds
     }
 
     try:
