@@ -2,6 +2,7 @@ import os
 import requests
 import yt_dlp
 import logging
+import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -30,6 +31,7 @@ def download_video(url, extract_audio=False):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
         },
+        'progress_hooks': [progress_hook],
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -47,6 +49,12 @@ def download_video(url, extract_audio=False):
     except Exception as e:
         logger.error(f"Error downloading video from {resolved_url}: {e}")
         return None, None
+
+def progress_hook(d):
+    if d['status'] == 'downloading':
+        logger.info(f"Downloading: {d['_percent_str']} at {d['_speed_str']} ETA: {d['_eta_str']}")
+    elif d['status'] == 'finished':
+        logger.info('Download complete')
 
 # Function to download images
 def download_image(url):
@@ -72,6 +80,17 @@ async def start(update, context):
     welcome_message = f"Welcome, {user_first_name}! 😊\nI'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, and I'll download it for you in HD!"
     await update.message.reply_text(welcome_message)
 
+# Command to provide help to users
+async def help_command(update, context):
+    help_text = (
+        "Here's how to use the bot:\n"
+        "/start - Welcome message\n"
+        "/help - Show this help message\n"
+        "Send a video link from Instagram, Facebook, or TikTok to download it in HD.\n"
+        "Click 'Convert to MP3' to convert a video to MP3 format."
+    )
+    await update.message.reply_text(help_text)
+
 # Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
@@ -89,7 +108,7 @@ async def handle_url(update, context):
                 with open(video_file, 'rb') as video:
                     await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
             else:
-                await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
+                await update.message.reply_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
         else:
             image_file = download_image(url)
             if image_file:
@@ -100,7 +119,7 @@ async def handle_url(update, context):
                 with open(image_file, 'rb') as image:
                     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
             else:
-                await update.message.reply_text('Failed to download the image. Make sure the link is correct or that the image is not private/restricted.')
+                await update.message.reply_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
     except Exception as e:
         logger.error(f"Error handling URL: {e}")
         await update.message.reply_text(f'Error: {str(e)}')
@@ -119,16 +138,26 @@ async def handle_callback_query(update, context):
                 with open(mp3_file, 'rb') as audio:
                     await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio)
             else:
-                await query.edit_message_text(text='Failed to download the MP3. Make sure the link is correct or that the video is not private/restricted.')
+                await query.edit_message_text(text='Failed to download the MP3. The link might be incorrect or the video might be private/restricted.')
         except Exception as e:
             logger.error(f"Error handling MP3 download: {e}")
             await query.edit_message_text(text=f'Error: {str(e)}')
+
+# Cleanup old files
+def cleanup_downloads():
+    try:
+        shutil.rmtree('downloads')
+        os.makedirs('downloads')
+        logger.info('Downloads directory cleaned up')
+    except Exception as e:
+        logger.error(f"Error cleaning up downloads directory: {e}")
 
 # Set up the bot
 def main():
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
 
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('help', help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
     application.add_handler(CallbackQueryHandler(handle_callback_query))
 
