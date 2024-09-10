@@ -5,6 +5,7 @@ import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+import asyncio  # For handling async tasks
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -93,11 +94,20 @@ async def handle_url(update, context):
 
     async def progress_hook(d):
         if d['status'] == 'downloading':
-            percent = d['_percent_str']
-            await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
+            percent = d['_percent_str'].strip()
+            speed = d.get('_speed_str', 'N/A')
+            eta = d.get('_eta_str', 'N/A')
+            try:
+                await message.edit_text(f"Downloading: {percent} at {speed} ETA: {eta}")
+            except Exception as e:
+                logger.error(f"Error updating progress message: {e}")
         elif d['status'] == 'finished':
-            await message.delete()  # Delete the initial message
-            await update.message.reply_text('Download complete')
+            try:
+                await message.edit_text('Download complete')
+                await asyncio.sleep(3)  # Optional: wait 3 seconds before removing the message
+                await message.delete()
+            except Exception as e:
+                logger.error(f"Error updating finished message: {e}")
 
     try:
         if 'douyin' in url or 'tiktok' in url:
