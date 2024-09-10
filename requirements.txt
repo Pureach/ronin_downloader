@@ -1,2 +1,4 @@
 pyTelegramBotAPI==4.5.1
 yt-dlp==2021.12.17
+pip install --upgrade pyTelegramBotAPI
+pip install --upgrade yt-dlp
