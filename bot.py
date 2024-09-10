@@ -22,7 +22,7 @@ def resolve_url(url):
 def download_video(url, extract_audio=False):
     resolved_url = resolve_url(url)
     ydl_opts = {
-        'format': 'bestvideo+bestaudio/best' if not extract_audio else 'bestaudio/best',
+        'format': 'bestvideo[height<=1080]+bestaudio/best' if not extract_audio else 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
         'noplaylist': True,
         'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
@@ -53,7 +53,7 @@ def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
-        if response.status_code == 200):
+        if response.status_code == 200:
             file_path = os.path.join('downloads', os.path.basename(resolved_url))
             with open(file_path, 'wb') as file:
                 for chunk in response.iter_content(1024):
