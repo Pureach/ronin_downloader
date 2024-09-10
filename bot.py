@@ -4,7 +4,7 @@ import yt_dlp
 import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,7 @@ if not os.path.exists(DOWNLOADS_DIR):
 # List to keep track of downloaded URLs
 downloaded_urls = []
 
-# Define default settings
+# Default settings
 DEFAULT_SETTINGS = {
     'video_quality': 'bestvideo[height<=1080]+bestaudio/best',
     'image_format': 'jpeg'
@@ -113,7 +113,7 @@ async def configure_settings(update, context):
     args = context.args
 
     if len(args) != 2:
-        await update.message.reply_text("Usage: /settings <option> <value>\nOptions: video_quality, image_format")
+        await update.message.reply_text("Usage: /configure <option> <value>\nOptions: video_quality, image_format")
         return
 
     option, value = args
