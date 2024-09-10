@@ -1,3 +1,5 @@
 python-telegram-bot==21.5
 yt-dlp==2024.08.06
 requests==2.32.3
+yt-dlp -U
+douyindl==6.0.9
