@@ -53,7 +53,7 @@ def download_image(url):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
-        if response.status_code == 200:
+        if response.status_code == 200):
             file_path = os.path.join('downloads', os.path.basename(resolved_url))
             with open(file_path, 'wb') as file:
                 for chunk in response.iter_content(1024):
@@ -83,7 +83,7 @@ async def handle_url(update, context):
             if video_file:
                 buttons = [
                     [InlineKeyboardButton("URL", url=url)],
-                    [InlineKeyboardButton("MP3", callback_data=f"mp3|{url}")]
+                    [InlineKeyboardButton("Convert to MP3", callback_data=f"mp3|{url}")]
                 ]
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
