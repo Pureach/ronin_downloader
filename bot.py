@@ -20,7 +20,7 @@ def resolve_url(url):
         return url
 
 # Function to download the video using yt-dlp with cookies support
-def download_video(url, extract_audio=False):
+def download_video(url, extract_audio=False, progress_callback=None):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/best' if not extract_audio else 'bestaudio/best',
@@ -31,7 +31,7 @@ def download_video(url, extract_audio=False):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
         },
-        'progress_hooks': [progress_hook],
+        'progress_hooks': [progress_callback] if progress_callback else [],
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -49,12 +49,6 @@ def download_video(url, extract_audio=False):
     except Exception as e:
         logger.error(f"Error downloading video from {resolved_url}: {e}")
         return None, None
-
-def progress_hook(d):
-    if d['status'] == 'downloading':
-        logger.info(f"Downloading: {d['_percent_str']} at {d['_speed_str']} ETA: {d['_eta_str']}")
-    elif d['status'] == 'finished':
-        logger.info('Download complete')
 
 # Function to download images
 def download_image(url):
@@ -94,11 +88,18 @@ async def help_command(update, context):
 # Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
-    await update.message.reply_text(f'Downloading from {url}...')
-    
+    message = await update.message.reply_text(f'Downloading from {url}...')
+
+    def progress_hook(d):
+        if d['status'] == 'downloading':
+            percent = d['_percent_str']
+            await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
+        elif d['status'] == 'finished':
+            await message.edit_text('Download complete')
+
     try:
         if 'douyin' in url or 'tiktok' in url:
-            video_file, info_dict = download_video(url)
+            video_file, info_dict = download_video(url, progress_callback=progress_hook)
             if video_file:
                 buttons = [
                     [InlineKeyboardButton("URL", url=url)],
@@ -108,7 +109,7 @@ async def handle_url(update, context):
                 with open(video_file, 'rb') as video:
                     await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
             else:
-                await update.message.reply_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
+                await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
         else:
             image_file = download_image(url)
             if image_file:
@@ -119,10 +120,10 @@ async def handle_url(update, context):
                 with open(image_file, 'rb') as image:
                     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
             else:
-                await update.message.reply_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
+                await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
     except Exception as e:
         logger.error(f"Error handling URL: {e}")
-        await update.message.reply_text(f'Error: {str(e)}')
+        await message.edit_text(f'Error: {str(e)}')
 
 # Handle callback queries for MP3 download
 async def handle_callback_query(update, context):
@@ -131,17 +132,25 @@ async def handle_callback_query(update, context):
     data = query.data.split('|')
     if data[0] == 'mp3':
         url = data[1]
-        await query.edit_message_text(text=f'Downloading MP3 from {url}...')
+        message = await query.edit_message_text(text=f'Downloading MP3 from {url}...')
+
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                percent = d['_percent_str']
+                await message.edit_text(f"Downloading MP3: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
+            elif d['status'] == 'finished':
+                await message.edit_text('MP3 download complete')
+
         try:
-            mp3_file, _ = download_video(url, extract_audio=True)
+            mp3_file, _ = download_video(url, extract_audio=True, progress_callback=progress_hook)
             if mp3_file:
                 with open(mp3_file, 'rb') as audio:
                     await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio)
             else:
-                await query.edit_message_text(text='Failed to download the MP3. The link might be incorrect or the video might be private/restricted.')
+                await message.edit_text('Failed to download the MP3. The link might be incorrect or the video might be private/restricted.')
         except Exception as e:
             logger.error(f"Error handling MP3 download: {e}")
-            await query.edit_message_text(text=f'Error: {str(e)}')
+            await message.edit_text(f'Error: {str(e)}')
 
 # Cleanup old files
 def cleanup_downloads():
