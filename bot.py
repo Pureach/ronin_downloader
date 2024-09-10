@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 if not os.path.exists('downloads'):
     os.makedirs('downloads')
 
+# List to keep track of downloaded URLs
+downloaded_urls = []
+
 # Resolve potential shortened URLs
 def resolve_url(url):
     try:
@@ -84,6 +87,12 @@ async def help_command(update, context):
 # Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
+    
+    # Check if the URL has already been downloaded
+    if url in downloaded_urls:
+        await update.message.reply_text('This link has already been downloaded.')
+        return
+
     message = await update.message.reply_text(f'Downloading from {url}...')
 
     async def progress_hook(d):
@@ -103,6 +112,7 @@ async def handle_url(update, context):
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
                     await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
+                downloaded_urls.append(url)  # Add URL to the list of downloaded URLs
             else:
                 await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
         else:
@@ -114,6 +124,7 @@ async def handle_url(update, context):
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(image_file, 'rb') as image:
                     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
+                downloaded_urls.append(url)  # Add URL to the list of downloaded URLs
             else:
                 await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
     except Exception as e:
