@@ -88,6 +88,7 @@ async def help_command(update, context):
 async def handle_url(update, context):
     url = update.message.text.strip()
 
+    # Send initial message and store it in a variable
     message = await update.message.reply_text('Starting download...')
 
     async def progress_hook(d):
@@ -95,7 +96,7 @@ async def handle_url(update, context):
             percent = d['_percent_str']
             await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
         elif d['status'] == 'finished':
-            await message.delete()
+            await message.delete()  # Delete the initial message
             await update.message.reply_text('Download complete')
 
     try:
