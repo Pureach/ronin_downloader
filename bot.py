@@ -1,3 +1,4 @@
+import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
@@ -8,8 +9,8 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Telegram Bot Token
-TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+# Accessing the Telegram Bot Token from Environment Variables
+TOKEN = os.getenv('TELEGRAM_TOKEN')
 
 def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -46,6 +47,9 @@ def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def main() -> None:
     """Start the bot."""
+    if not TOKEN:
+        logger.error('The TELEGRAM_TOKEN environment variable is not set.')
+        return
     application = Application.builder().token(TOKEN).build()
 
     # on different commands - answer in Telegram
