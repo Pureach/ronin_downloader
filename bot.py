@@ -1,7 +1,8 @@
 import os
 import requests
+from telegram.ext import Application, CommandHandler, MessageHandler
+from telegram.ext import filters
 import yt_dlp
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Resolve potential shortened URLs
 def resolve_url(url):
@@ -17,9 +18,9 @@ def download_video(url):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
         'noplaylist': True,
-        'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
+        'cookiefile': 'cookies.txt',  # Use your saved cookies from browser
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
@@ -51,7 +52,7 @@ async def handle_url(update, context):
         if video_file:
             await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
         else:
-            await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
+            await update.message.reply_text('Failed to download video. Make sure the link is correct or that the video is not private/restricted.')
     except Exception as e:
         await update.message.reply_text(f'Error: {str(e)}')
 
