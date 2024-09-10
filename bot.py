@@ -10,6 +10,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Ensure the downloads directory exists
+if not os.path.exists('downloads'):
+    os.makedirs('downloads')
+
 # Resolve potential shortened URLs
 def resolve_url(url):
     try:
@@ -90,7 +94,7 @@ async def handle_url(update, context):
     url = update.message.text.strip()
     message = await update.message.reply_text(f'Downloading from {url}...')
 
-    def progress_hook(d):
+    async def progress_hook(d):
         if d['status'] == 'downloading':
             percent = d['_percent_str']
             await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
@@ -134,7 +138,7 @@ async def handle_callback_query(update, context):
         url = data[1]
         message = await query.edit_message_text(text=f'Downloading MP3 from {url}...')
 
-        def progress_hook(d):
+        async def progress_hook(d):
             if d['status'] == 'downloading':
                 percent = d['_percent_str']
                 await message.edit_text(f"Downloading MP3: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
