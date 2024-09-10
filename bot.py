@@ -1,5 +1,6 @@
 import os
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Application, CommandHandler, MessageHandler
+from telegram.ext import filters
 import yt_dlp
 
 # Function to download the video using yt-dlp
@@ -16,29 +17,27 @@ def download_video(url):
         return video_title
 
 # Command to start the bot
-def start(update, context):
-    update.message.reply_text('Send me a video link, and I\'ll download it for you in HD!')
+async def start(update, context):
+    await update.message.reply_text('Send me a video link, and I\'ll download it for you in HD!')
 
 # Handle URLs and download video
-def handle_url(update, context):
+async def handle_url(update, context):
     url = update.message.text
-    update.message.reply_text(f'Downloading video from {url}...')
+    await update.message.reply_text(f'Downloading video from {url}...')
     try:
         video_file = download_video(url)
-        context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
+        await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
     except Exception as e:
-        update.message.reply_text('Failed to download video. Make sure the link is correct.')
+        await update.message.reply_text('Failed to download video. Make sure the link is correct.')
 
 # Set up the bot
 def main():
-    updater = Updater(token=os.getenv('TELEGRAM_TOKEN'), use_context=True)
-    dp = updater.dispatcher
+    application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
 
-    dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_url))
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
 
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
