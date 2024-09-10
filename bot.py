@@ -4,18 +4,27 @@ import yt_dlp
 import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Ensure the downloads directory exists
-if not os.path.exists('downloads'):
-    os.makedirs('downloads')
+DOWNLOADS_DIR = 'downloads'
+if not os.path.exists(DOWNLOADS_DIR):
+    os.makedirs(DOWNLOADS_DIR)
 
 # List to keep track of downloaded URLs
 downloaded_urls = []
+
+# Define default settings
+DEFAULT_SETTINGS = {
+    'video_quality': 'bestvideo[height<=1080]+bestaudio/best',
+    'image_format': 'jpeg'
+}
+
+user_settings = {}  # To store user-specific settings
 
 # Resolve potential shortened URLs
 def resolve_url(url):
@@ -28,11 +37,11 @@ def resolve_url(url):
         return url
 
 # Function to download the video using yt-dlp with cookies support
-def download_video(url, progress_callback=None):
+def download_video(url, quality, progress_callback=None):
     resolved_url = resolve_url(url)
     ydl_opts = {
-        'format': 'bestvideo[height<=1080]+bestaudio/best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'format': quality,
+        'outtmpl': f'{DOWNLOADS_DIR}/%(title)s.%(ext)s',
         'noplaylist': True,
         'cookiefile': 'cookies.txt',
         'http_headers': {
@@ -52,12 +61,12 @@ def download_video(url, progress_callback=None):
         return None, None
 
 # Function to download images
-def download_image(url):
+def download_image(url, format):
     resolved_url = resolve_url(url)
     try:
         response = requests.get(resolved_url, stream=True)
         response.raise_for_status()
-        file_path = os.path.join('downloads', os.path.basename(resolved_url))
+        file_path = os.path.join(DOWNLOADS_DIR, f"{os.path.basename(resolved_url).split('.')[0]}.{format}")
         with open(file_path, 'wb') as file:
             for chunk in response.iter_content(1024):
                 file.write(chunk)
@@ -71,7 +80,7 @@ async def start(update, context):
     user_first_name = update.effective_user.first_name
     welcome_message = (f"Welcome, {user_first_name}! 😊\n"
                        "I'm Ronin Downloader bot. Send me a video or image link from popular media platforms, "
-                       "and I'll download it for you in HD!")
+                       "and I'll download it for you in HD! Use /help to see available commands.")
     await update.message.reply_text(welcome_message)
 
 # Command to provide help to users
@@ -80,13 +89,71 @@ async def help_command(update, context):
         "Here's how to use the bot:\n"
         "/start - Welcome message\n"
         "/help - Show this help message\n"
+        "/settings - Configure your preferences (e.g., video quality, image format)\n"
+        "/list - List all downloaded files\n"
+        "/delete <filename> - Delete a specific downloaded file\n"
         "Send a video or image link from popular media platforms to download it in HD."
     )
     await update.message.reply_text(help_text)
 
+# Command to display current settings
+async def settings(update, context):
+    user_id = update.effective_user.id
+    settings = user_settings.get(user_id, DEFAULT_SETTINGS)
+    settings_text = (
+        f"Current settings:\n"
+        f"Video Quality: {settings['video_quality']}\n"
+        f"Image Format: {settings['image_format']}"
+    )
+    await update.message.reply_text(settings_text)
+
+# Command to configure user settings
+async def configure_settings(update, context):
+    user_id = update.effective_user.id
+    args = context.args
+
+    if len(args) != 2:
+        await update.message.reply_text("Usage: /settings <option> <value>\nOptions: video_quality, image_format")
+        return
+
+    option, value = args
+    if option == 'video_quality':
+        user_settings.setdefault(user_id, DEFAULT_SETTINGS)['video_quality'] = value
+        await update.message.reply_text(f"Video quality set to: {value}")
+    elif option == 'image_format':
+        user_settings.setdefault(user_id, DEFAULT_SETTINGS)['image_format'] = value
+        await update.message.reply_text(f"Image format set to: {value}")
+    else:
+        await update.message.reply_text("Invalid option. Use /settings to see available options.")
+
+# Command to list downloaded files
+async def list_downloads(update, context):
+    files = os.listdir(DOWNLOADS_DIR)
+    if files:
+        files_list = '\n'.join(files)
+        await update.message.reply_text(f"Downloaded files:\n{files_list}")
+    else:
+        await update.message.reply_text("No files have been downloaded yet.")
+
+# Command to delete a specific downloaded file
+async def delete_file(update, context):
+    if not context.args:
+        await update.message.reply_text("Usage: /delete <filename>")
+        return
+    
+    filename = context.args[0]
+    file_path = os.path.join(DOWNLOADS_DIR, filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        await update.message.reply_text(f"File deleted: {filename}")
+    else:
+        await update.message.reply_text(f"File not found: {filename}")
+
 # Handle URLs and download video or image
 async def handle_url(update, context):
     url = update.message.text.strip()
+    user_id = update.effective_user.id
+    settings = user_settings.get(user_id, DEFAULT_SETTINGS)
 
     # Send initial message
     message = await update.message.reply_text('Processing your request...')
@@ -115,39 +182,41 @@ async def handle_url(update, context):
         }
 
         # Detect platform and download accordingly
+        platform_detected = None
         for platform, keyword in platforms.items():
             if keyword in url:
-                if platform in ['tiktok', 'douyin', 'instagram', 'facebook', 'youtube']:
-                    video_file, info_dict = download_video(url, progress_callback=progress_hook)
-                    if video_file:
-                        buttons = [
-                            [InlineKeyboardButton("URL", url=url)]
-                        ]
-                        reply_markup = InlineKeyboardMarkup(buttons)
-                        with open(video_file, 'rb') as video:
-                            await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
-                        downloaded_urls.append(url)
-                        break
-                    else:
-                        await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
-                elif platform in ['twitter', 'vimeo']:
-                    # For simplicity, handling as images here. Expand with actual video download if needed.
-                    image_file = download_image(url)
-                    if image_file:
-                        buttons = [
-                            [InlineKeyboardButton("URL", url=url)]
-                        ]
-                        reply_markup = InlineKeyboardMarkup(buttons)
-                        with open(image_file, 'rb') as image:
-                            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
-                        downloaded_urls.append(url)
-                        break
-                else:
-                    await message.edit_text('Unsupported media platform.')
-                return
+                platform_detected = platform
+                break
 
-        # If no platform matched
-        await message.edit_text('Unsupported media platform or failed to identify the content.')
+        if platform_detected:
+            if platform_detected in ['tiktok', 'douyin', 'instagram', 'facebook', 'youtube']:
+                video_file, info_dict = download_video(url, settings['video_quality'], progress_callback=progress_hook)
+                if video_file:
+                    buttons = [
+                        [InlineKeyboardButton("URL", url=url)]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(buttons)
+                    with open(video_file, 'rb') as video:
+                        await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
+                    downloaded_urls.append(url)
+                else:
+                    await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
+            elif platform_detected in ['twitter', 'vimeo']:
+                image_file = download_image(url, settings['image_format'])
+                if image_file:
+                    buttons = [
+                        [InlineKeyboardButton("URL", url=url)]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(buttons)
+                    with open(image_file, 'rb') as image:
+                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
+                    downloaded_urls.append(url)
+                else:
+                    await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
+            else:
+                await message.edit_text('Unsupported media platform.')
+        else:
+            await message.edit_text('Unsupported media platform or failed to identify the content.')
 
     except Exception as e:
         logger.error(f"Error handling URL: {e}")
@@ -156,8 +225,8 @@ async def handle_url(update, context):
 # Cleanup old files
 def cleanup_downloads():
     try:
-        shutil.rmtree('downloads')
-        os.makedirs('downloads')
+        shutil.rmtree(DOWNLOADS_DIR)
+        os.makedirs(DOWNLOADS_DIR)
         logger.info('Downloads directory cleaned up')
     except Exception as e:
         logger.error(f"Error cleaning up downloads directory: {e}")
@@ -168,6 +237,10 @@ def main():
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('settings', settings))
+    application.add_handler(CommandHandler('configure', configure_settings))
+    application.add_handler(CommandHandler('list', list_downloads))
+    application.add_handler(CommandHandler('delete', delete_file))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
 
     application.run_polling()
