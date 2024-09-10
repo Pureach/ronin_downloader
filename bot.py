@@ -70,7 +70,7 @@ def download_image(url):
 async def start(update, context):
     user_first_name = update.effective_user.first_name
     welcome_message = (f"Welcome, {user_first_name}! 😊\n"
-                       "I'm Ronin Downloader bot. Send me a video link from Instagram, Facebook, or TikTok, "
+                       "I'm Ronin Downloader bot. Send me a video or image link from popular media platforms, "
                        "and I'll download it for you in HD!")
     await update.message.reply_text(welcome_message)
 
@@ -80,7 +80,7 @@ async def help_command(update, context):
         "Here's how to use the bot:\n"
         "/start - Welcome message\n"
         "/help - Show this help message\n"
-        "Send a video link from Instagram, Facebook, or TikTok to download it in HD."
+        "Send a video or image link from popular media platforms to download it in HD."
     )
     await update.message.reply_text(help_text)
 
@@ -99,30 +99,52 @@ async def handle_url(update, context):
             await message.edit_text('Download complete')
 
     try:
-        if 'douyin' in url or 'tiktok' in url:
-            video_file, info_dict = download_video(url, progress_callback=progress_hook)
-            if video_file:
-                buttons = [
-                    [InlineKeyboardButton("URL", url=url)]
-                ]
-                reply_markup = InlineKeyboardMarkup(buttons)
-                with open(video_file, 'rb') as video:
-                    await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
-                downloaded_urls.append(url)
-            else:
-                await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
-        else:
-            image_file = download_image(url)
-            if image_file:
-                buttons = [
-                    [InlineKeyboardButton("URL", url=url)]
-                ]
-                reply_markup = InlineKeyboardMarkup(buttons)
-                with open(image_file, 'rb') as image:
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
-                downloaded_urls.append(url)
-            else:
-                await message.edit_text('Failed to download the image. The link might be incorrect or the image might be private/restricted.')
+        # Define platform-specific patterns
+        platforms = {
+            'tiktok': 'tiktok',
+            'douyin': 'douyin',
+            'instagram': 'instagram',
+            'facebook': 'facebook',
+            'youtube': 'youtube',
+            'twitter': 'twitter',
+            'vimeo': 'vimeo'
+        }
+
+        # Detect platform and download accordingly
+        for platform, keyword in platforms.items():
+            if keyword in url:
+                if platform in ['tiktok', 'douyin', 'instagram', 'facebook', 'youtube']:
+                    video_file, info_dict = download_video(url, progress_callback=progress_hook)
+                    if video_file:
+                        buttons = [
+                            [InlineKeyboardButton("URL", url=url)]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(buttons)
+                        with open(video_file, 'rb') as video:
+                            await context.bot.send_video(chat_id=update.effective_chat.id, video=video, reply_markup=reply_markup)
+                        downloaded_urls.append(url)
+                        break
+                    else:
+                        await message.edit_text('Failed to download the video. The link might be incorrect or the video might be private/restricted.')
+                elif platform in ['twitter', 'vimeo']:
+                    # For simplicity, handling as images here. Expand with actual video download if needed.
+                    image_file = download_image(url)
+                    if image_file:
+                        buttons = [
+                            [InlineKeyboardButton("URL", url=url)]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(buttons)
+                        with open(image_file, 'rb') as image:
+                            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image, reply_markup=reply_markup)
+                        downloaded_urls.append(url)
+                        break
+                else:
+                    await message.edit_text('Unsupported media platform.')
+                return
+
+        # If no platform matched
+        await message.edit_text('Unsupported media platform or failed to identify the content.')
+
     except Exception as e:
         logger.error(f"Error handling URL: {e}")
         await message.edit_text(f'Error: {str(e)}')
