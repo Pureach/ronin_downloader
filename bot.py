@@ -4,7 +4,7 @@ import yt_dlp
 import logging
 import shutil
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,10 +24,10 @@ def resolve_url(url):
         return url
 
 # Function to download the video using yt-dlp with cookies support
-def download_video(url, extract_audio=False, progress_callback=None):
+def download_video(url, progress_callback=None):
     resolved_url = resolve_url(url)
     ydl_opts = {
-        'format': 'bestvideo[height<=1080]+bestaudio/best' if not extract_audio else 'bestaudio/best',
+        'format': 'bestvideo[height<=1080]+bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
         'noplaylist': True,
         'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
@@ -35,20 +35,13 @@ def download_video(url, extract_audio=False, progress_callback=None):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
         },
-        'progress_hooks': [progress_callback] if progress_callback else [],
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }] if extract_audio else []
+        'progress_hooks': [progress_callback] if progress_callback else []
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(resolved_url, download=True)
             file_path = ydl.prepare_filename(info_dict)
-            if extract_audio:
-                file_path = file_path.rsplit('.', 1)[0] + '.mp3'
             return file_path, info_dict
     except Exception as e:
         logger.error(f"Error downloading video from {resolved_url}: {e}")
@@ -84,8 +77,7 @@ async def help_command(update, context):
         "Here's how to use the bot:\n"
         "/start - Welcome message\n"
         "/help - Show this help message\n"
-        "Send a video link from Instagram, Facebook, or TikTok to download it in HD.\n"
-        "Click 'Convert to MP3' to convert a video to MP3 format."
+        "Send a video link from Instagram, Facebook, or TikTok to download it in HD."
     )
     await update.message.reply_text(help_text)
 
@@ -106,8 +98,7 @@ async def handle_url(update, context):
             video_file, info_dict = download_video(url, progress_callback=progress_hook)
             if video_file:
                 buttons = [
-                    [InlineKeyboardButton("URL", url=url)],
-                    [InlineKeyboardButton("Convert to MP3", callback_data=f"mp3|{url}")]
+                    [InlineKeyboardButton("URL", url=url)]
                 ]
                 reply_markup = InlineKeyboardMarkup(buttons)
                 with open(video_file, 'rb') as video:
@@ -129,33 +120,6 @@ async def handle_url(update, context):
         logger.error(f"Error handling URL: {e}")
         await message.edit_text(f'Error: {str(e)}')
 
-# Handle callback queries for MP3 download
-async def handle_callback_query(update, context):
-    query = update.callback_query
-    await query.answer()
-    data = query.data.split('|')
-    if data[0] == 'mp3':
-        url = data[1]
-        message = await query.edit_message_text(text=f'Downloading MP3 from {url}...')
-
-        async def progress_hook(d):
-            if d['status'] == 'downloading':
-                percent = d['_percent_str']
-                await message.edit_text(f"Downloading MP3: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
-            elif d['status'] == 'finished':
-                await message.edit_text('MP3 download complete')
-
-        try:
-            mp3_file, _ = download_video(url, extract_audio=True, progress_callback=progress_hook)
-            if mp3_file:
-                with open(mp3_file, 'rb') as audio:
-                    await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio)
-            else:
-                await message.edit_text('Failed to download the MP3. The link might be incorrect or the video might be private/restricted.')
-        except Exception as e:
-            logger.error(f"Error handling MP3 download: {e}")
-            await message.edit_text(f'Error: {str(e)}')
-
 # Cleanup old files
 def cleanup_downloads():
     try:
@@ -172,7 +136,6 @@ def main():
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
-    application.add_handler(CallbackQueryHandler(handle_callback_query))
 
     application.run_polling()
 
