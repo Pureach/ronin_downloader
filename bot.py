@@ -2,6 +2,7 @@ import os
 import requests
 from telegram.ext import Application, CommandHandler, MessageHandler
 from telegram.ext import filters
+from telegram.ext import Updater
 import yt_dlp
 
 # Resolve potential shortened URLs
@@ -35,6 +36,11 @@ def download_video(url):
     except Exception as e:
         print(f"Error downloading video from {resolved_url}: {e}")
         return None
+    
+def my_command_handler(update, context):
+    # Access context for user data, chat ID, etc.
+    user_id = update.message.from_user.id
+    chat_id = update.message.chat_id
 
 # Command to start the bot and welcome new users
 async def start(update, context):
@@ -58,12 +64,16 @@ async def handle_url(update, context):
 
 # Set up the bot
 def main():
+    updater = Updater(token='YOUR_BOT_TOKEN', use_context=True)
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
 
     application.run_polling()
+
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == '__main__':
     main()
