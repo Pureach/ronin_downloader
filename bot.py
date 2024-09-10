@@ -93,12 +93,12 @@ async def handle_url(update, context):
         await update.message.reply_text('This link has already been downloaded.')
         return
 
-    message = await update.message.reply_text(f'Downloading from {url}...')
+    message = await update.message.reply_text('Starting download...')
 
     async def progress_hook(d):
         if d['status'] == 'downloading':
             percent = d['_percent_str']
-            await message.edit_text(f"Downloading from {url}: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
+            await message.edit_text(f"Downloading: {percent} at {d['_speed_str']} ETA: {d['_eta_str']}")
         elif d['status'] == 'finished':
             await message.edit_text('Download complete')
 
