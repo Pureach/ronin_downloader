@@ -1,22 +1,15 @@
 import os
 import requests
-from telegram.ext import Application, CommandHandler, MessageHandler
-from telegram.ext import filters
 import yt_dlp
-import logging
-
-# Setup logging for debugging purposes
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Resolve potential shortened URLs
 def resolve_url(url):
     try:
         response = requests.get(url)
-        logger.info(f"Resolved URL: {response.url}")
         return response.url
     except Exception as e:
-        logger.error(f"Failed to resolve URL: {e}")
+        print(f"Failed to resolve URL: {e}")
         return url
 
 # Function to download the video using yt-dlp with cookies support
@@ -24,9 +17,9 @@ def download_video(url):
     resolved_url = resolve_url(url)
     ydl_opts = {
         'format': 'best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',  # Adjust the output directory as needed
         'noplaylist': True,
-        'cookiefile': 'cookies.txt',  # Use your saved cookies from browser
+        'cookiefile': 'cookies.txt',  # Use your saved cookies from the browser
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0',
             'Referer': resolved_url,
@@ -37,13 +30,10 @@ def download_video(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(resolved_url, download=True)
             video_title = ydl.prepare_filename(info_dict)
-            logger.info(f"Successfully downloaded video: {video_title}")
             return video_title
-    except yt_dlp.utils.DownloadError as e:
-        logger.error(f"Download error: {e}")
     except Exception as e:
-        logger.error(f"Unexpected error during download: {e}")
-    return None
+        print(f"Error downloading video from {resolved_url}: {e}")
+        return None
 
 # Command to start the bot and welcome new users
 async def start(update, context):
@@ -61,9 +51,8 @@ async def handle_url(update, context):
         if video_file:
             await context.bot.send_video(chat_id=update.effective_chat.id, video=open(video_file, 'rb'))
         else:
-            await update.message.reply_text('Failed to download video. Make sure the link is correct or that the video is not private/restricted.')
+            await update.message.reply_text('Failed to download the video. Make sure the link is correct or that the video is not private/restricted.')
     except Exception as e:
-        logger.error(f"Error processing video download: {e}")
         await update.message.reply_text(f'Error: {str(e)}')
 
 # Set up the bot
