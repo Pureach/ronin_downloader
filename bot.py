@@ -28,7 +28,7 @@ async def download_video(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text('Please send a valid Douyin/TikTok video link.')
 
 def extract_video_url(url: str) -> str:
-    # Placeholder for actual video URL extraction logic
+    # Implement the actual video URL extraction logic here
     return url
 
 def main() -> None:
