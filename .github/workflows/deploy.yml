@@ -5,6 +5,7 @@ on:
     branches:
       - main
   schedule:
+    # Schedule to run the bot every hour (change as per your requirement)
     - cron: '0 * * * *'
 
 jobs:
@@ -36,5 +37,5 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
           python bot.py > bot.log 2>&1 &
-          sleep 300
-          cat bot.log
+          sleep 300  # Keeps the bot alive for 5 minutes (adjust as needed)
+          cat bot.log  # Output the log for debugging
