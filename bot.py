@@ -3,14 +3,20 @@ import requests
 from telegram.ext import Application, CommandHandler, MessageHandler
 from telegram.ext import filters
 import yt_dlp
+import logging
+
+# Setup logging for debugging purposes
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Resolve potential shortened URLs
 def resolve_url(url):
     try:
         response = requests.get(url)
+        logger.info(f"Resolved URL: {response.url}")
         return response.url
     except Exception as e:
-        print(f"Failed to resolve URL: {e}")
+        logger.error(f"Failed to resolve URL: {e}")
         return url
 
 # Function to download the video using yt-dlp with cookies support
@@ -31,10 +37,13 @@ def download_video(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(resolved_url, download=True)
             video_title = ydl.prepare_filename(info_dict)
+            logger.info(f"Successfully downloaded video: {video_title}")
             return video_title
+    except yt_dlp.utils.DownloadError as e:
+        logger.error(f"Download error: {e}")
     except Exception as e:
-        print(f"Error downloading video from {resolved_url}: {e}")
-        return None
+        logger.error(f"Unexpected error during download: {e}")
+    return None
 
 # Command to start the bot and welcome new users
 async def start(update, context):
@@ -54,6 +63,7 @@ async def handle_url(update, context):
         else:
             await update.message.reply_text('Failed to download video. Make sure the link is correct or that the video is not private/restricted.')
     except Exception as e:
+        logger.error(f"Error processing video download: {e}")
         await update.message.reply_text(f'Error: {str(e)}')
 
 # Set up the bot
