@@ -139,4 +139,3 @@ Remove-Item HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RunMRU -For
 
 # Notify user and exit script
 Show-Notification -Message "Script completed successfully." -Title "Script Notification"
-exit;
