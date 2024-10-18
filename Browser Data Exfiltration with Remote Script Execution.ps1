@@ -85,7 +85,7 @@ function Get-BrowserData {
             Write-Warning "Unsupported data type for $Browser."
         }
     } catch {
-        Write-Error "Failed to extract $DataType from $Browser: $_"
+        Write-Error "Failed to extract $DataType from $Browser: $($_.Exception.Message)"
     }
 }
 
